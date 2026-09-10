@@ -1,0 +1,27 @@
+# Dependències (s'instal·len soles amb "npm install")
+node_modules/
+
+# Build de producció (Cloudflare el genera a cada desplegament)
+dist/
+.wrangler/
+
+# Variables d'entorn — MAI han d'anar al repositori
+.env
+.env.*
+!.env.example
+
+# Registres i cau
+*.log
+npm-debug.log*
+.vite/
+.cache/
+
+# Fitxers del sistema operatiu
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.vscode/
+.idea/
+*.swp
