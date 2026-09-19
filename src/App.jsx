@@ -2399,9 +2399,9 @@ function Modal({ titol, children, onClose }) {
 function baixa(nom, blob) { const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = nom; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1500); }
 function LogoITAEB({ size = 120, ambText = true }) {
   // Reconstrucció vectorial fidel del logo del centre.
-  const vb = ambText ? "128 60 440 710" : "138 68 420 420";
+  const vb = ambText ? "30 60 640 710" : "138 68 420 420";
   return (
-    <svg width={size} height={size * (ambText ? 700 / 420 : 1)} viewBox={vb} xmlns="http://www.w3.org/2000/svg"
+    <svg width={size} height={size * (ambText ? 710 / 640 : 1)} viewBox={vb} xmlns="http://www.w3.org/2000/svg"
       role="img" aria-label="Institut de Tècniques Audiovisuals i de l'Espectacle de Barcelona">
       <g fill="none" strokeWidth="14" strokeLinecap="square">
         <path d="M149 162 L266 205 L267 474 L148 361 Z" stroke={BRAND.blau} />
