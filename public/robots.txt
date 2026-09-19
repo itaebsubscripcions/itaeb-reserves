@@ -1,0 +1,3 @@
+# Eina interna del centre: no indexar als cercadors
+User-agent: *
+Disallow: /
