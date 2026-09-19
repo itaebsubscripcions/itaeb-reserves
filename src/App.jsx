@@ -1177,7 +1177,7 @@ function Login({ onEntrar }) {
             </div>
           )}
 
-          <p className="login-ajuda">Has perdut l'accés al teu compte del centre? Escriu a <b>consergeria@itaeb.cat</b>.</p>
+          
         </div>
         <footer className="login-foot">Institut de Tècniques Audiovisuals i de l'Espectacle de Barcelona</footer>
       </main>
