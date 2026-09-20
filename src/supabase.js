@@ -79,13 +79,14 @@ export const db = {
   },
 
   async carregaTot() {
-    const [mat, esp, pro, ass, usu, res] = await Promise.all([
+    const [mat, esp, pro, ass, usu, res, hor] = await Promise.all([
       supabase.from("material").select("*").order("categoria").order("nom"),
       supabase.from("espais").select("*").order("nom"),
       supabase.from("protocols").select("*"),
       supabase.from("assignatures").select("nom").order("nom"),
       supabase.from("usuaris").select("email, nom, rol, grup").order("nom"),
       supabase.from("reserves").select("*").order("data", { ascending: false }).limit(2000),
+      supabase.from("horari_lectiu").select("*"),
     ]);
     const usuaris = usu.data || [];
     const protocols = {};
@@ -102,6 +103,11 @@ export const db = {
       profes: usuaris.filter((u) => u.rol === "professor").map((u) => ({ nom: u.nom, email: u.email })),
       alumnes: usuaris.filter((u) => u.rol === "alumne").map((u) => ({ nom: u.nom, email: u.email, grup: u.grup || "" })),
       reserves: (res.data || []).map(resDeDB),
+      horari: (hor.data || []).map((h) => ({
+        espai: h.espai, dia: h.dia,
+        ini: (h.hora_ini || "").slice(0, 5), fi: (h.hora_fi || "").slice(0, 5),
+        label: h.assignatura || h.grup || "Ocupat",
+      })),
     };
   },
 

@@ -1009,6 +1009,7 @@ export default function App() {
   const [sessio, setSessio] = useState(DEMO ? false : null);
   const [email, setEmail] = useState("");
   const [protocols, setProtocols] = useState(DEMO ? PROTOCOLS : {});
+  const [horari, setHorari] = useState(DEMO ? HORARI_LECTIU : []);
   const [carregant, setCarregant] = useState(false);
   const [errorBD, setErrorBD] = useState("");
   const [rol, setRol] = useState("Professor");
@@ -1053,7 +1054,7 @@ export default function App() {
         if (!viu) return;
         setMaterial(d.material); setEspais(d.espais); setProtocols(d.protocols);
         setAssignatures(d.assignatures); setProfes(d.profes); setAlumnes(d.alumnes);
-        setReserves(d.reserves); setErrorBD("");
+        setReserves(d.reserves); setHorari(d.horari || []); setErrorBD("");
       })
       .catch((e) => viu && setErrorBD(e.message || "No s'han pogut carregar les dades."))
       .finally(() => viu && setCarregant(false));
@@ -1172,7 +1173,7 @@ export default function App() {
       <main className="main">
         {vista === "inici" && <Inici {...{ reserves, rol, usuari }} />}
         {vista === "material" && <Material {...{ material, reserves, crearReserves, rol, usuari, profes, alumnes, assignatures, scan, setScan, notifica }} />}
-        {vista === "espais" && rol !== "Alumne" && <Espais {...{ espais, reserves, crearReserva, rol, usuari, profes, assignatures, protocols }} />}
+        {vista === "espais" && rol !== "Alumne" && <Espais {...{ espais, reserves, crearReserva, rol, usuari, profes, assignatures, protocols, horari }} />}
         {vista === "fora" && <ForaHorari {...{ espais, material, reserves, crearReserva, rol, usuari, profes, assignatures, protocols }} />}
         {vista === "escaneig" && <Escaneig {...{ material, reserves, crearReserves, rol, usuari, profes, alumnes, assignatures, notifica }} />}
         {vista === "sol.licituds" && <Solicituds {...{ pendents, enPrestec, potAprovar, resolReserva, resolMolts, registrarRetorn, rol }} />}
@@ -1705,7 +1706,7 @@ function Escaneig({ material, reserves, crearReserves, rol, usuari, profes, alum
 }
 
 /* ---------------- ESPAIS ---------------- */
-function Espais({ espais, reserves, crearReserva, rol, usuari, profes, assignatures, protocols = PROTOCOLS }) {
+function Espais({ espais, reserves, crearReserva, rol, usuari, profes, assignatures, protocols = PROTOCOLS, horari = HORARI_LECTIU }) {
   const wk = useSetmana();
   const [selNom, setSelNom] = useState(espais.length ? espais[0].nom : "");
   const [obrirForm, setObrirForm] = useState(false);
@@ -1713,10 +1714,10 @@ function Espais({ espais, reserves, crearReserva, rol, usuari, profes, assignatu
   const sel = espais.length ? (espais.find((e) => e.nom === selNom) || espais[0]) : null;
   const nomSel = sel ? sel.nom : "";
   const dadesEspai = useMemo(() => {
-    const lect = DIES.map((dia) => HORARI_LECTIU.filter((h) => h.espai === nomSel && h.dia === dia));
+    const lect = DIES.map((dia) => horari.filter((h) => h.espai === nomSel && h.dia === dia));
     const res = wk.dates.map((d) => reserves.filter((r) => r.tipus === "espai" && r.ref === nomSel && r.data === d && esActiva(r)));
     return { lect, res };
-  }, [nomSel, reserves, wk.dates]);
+  }, [nomSel, reserves, wk.dates, horari]);
   if (!sel) return <Buit>No hi ha espais. Afegeix-ne des d'"Edició pestanyes".</Buit>;
   const proto = protocols[sel.nom];
   const entriesFor = (di, f) => [
@@ -1724,7 +1725,9 @@ function Espais({ espais, reserves, crearReserva, rol, usuari, profes, assignatu
     ...dadesEspai.res[di].filter((r) => solapa(r.ini, r.fi, f.ini, f.fi)).map((r) => ({ label: `${r.sol} · ${r.motiu || "reserva"}`, color: r.estat === "confirmada" ? BRAND.blau : BRAND.groc })),
   ];
   const hintFor = proto ? (di, f) => proto.slots.some((s) => s.dia === DIES[di] && solapa(s.ini, s.fi, f.ini, f.fi)) : null;
-  const clickable = proto ? hintFor : () => true;
+  // Una franja amb classe lectiva queda bloquejada: no es pot reservar
+  const ocupadaLectiu = (di, f) => dadesEspai.lect[di].some((h) => solapa(h.ini, h.fi, f.ini, f.fi));
+  const clickable = (di, f) => !ocupadaLectiu(di, f) && (proto ? hintFor(di, f) : true);
   const onCell = (di, f) => {
     if (proto) { const idx = proto.slots.findIndex((s) => s.dia === DIES[di] && solapa(s.ini, s.fi, f.ini, f.fi)); if (idx < 0) return; setPreset({ slotIdx: idx }); }
     else setPreset({ data: wk.dates[di], ini: f.ini, fi: f.fi });
@@ -1752,12 +1755,12 @@ function Espais({ espais, reserves, crearReserva, rol, usuari, profes, assignatu
           <span><i style={{ background: BRAND.groc }} /> Pendent</span>
           {proto && <span><i style={{ background: "#fdf0c9", border: "1px solid " + BRAND.groc }} /> Franja reservable</span>}
         </div>
-        <p className="nota" style={{ margin: "0 0 8px" }}>Clica una franja per reservar-hi{proto ? " (només les marcades)" : ""}, o fes servir el botó Reservar.</p>
+        <p className="nota" style={{ margin: "0 0 8px" }}>Clica una franja lliure per reservar-hi{proto ? " (només les marcades)" : ""}. Les ocupades per classes no es poden seleccionar.</p>
         <WeekNav wk={wk} />
         <WeekGrid entriesFor={entriesFor} hintFor={hintFor} onCell={onCell} clickable={clickable} dates={wk.dates} holidayOf={festiu} />
         {proto
           ? <p className="nota" style={{ marginTop: 10 }}>Fora d'horari només es pot reservar a les franges marcades. {proto.nota}</p>
-          : <p className="nota" style={{ marginTop: 10 }}>Horari lectiu d'exemple: s'omplirà des del full d'horaris del centre.</p>}
+          : <p className="nota" style={{ marginTop: 10 }}>Les franges amb classe lectiva apareixen en negre i no es poden reservar.</p>}
         {obrirForm && <FormEspai e={sel} rol={rol} usuari={usuari} preset={preset} profes={profes} assignatures={assignatures} protocols={protocols} onClose={() => setObrirForm(false)} onSubmit={crearReserva} />}
       </section>
     </div>
