@@ -1033,10 +1033,12 @@ export default function App() {
       if (!s) { setSessio(false); return; }
       const correu = s.user.email || "";
       setEmail(correu);
+      const md = s.user.user_metadata || {};
+      const nomGoogle = md.full_name || md.name || "";
       try {
-        const p = await db.perfil(correu);
+        const p = await db.perfil(correu, nomGoogle);
         setUsuari(p.nom); setRol(p.rol);
-      } catch (e) { setUsuari(correu); setRol("Alumne"); }
+      } catch (e) { setUsuari(nomGoogle || correu); setRol("Alumne"); }
       setSessio(true);
     });
   }, []);
@@ -1168,7 +1170,7 @@ export default function App() {
         ))}
       </nav>
       <main className="main">
-        {vista === "inici" && <Inici {...{ reserves, rol }} />}
+        {vista === "inici" && <Inici {...{ reserves, rol, usuari }} />}
         {vista === "material" && <Material {...{ material, reserves, crearReserves, rol, usuari, profes, alumnes, assignatures, scan, setScan, notifica }} />}
         {vista === "espais" && rol !== "Alumne" && <Espais {...{ espais, reserves, crearReserva, rol, usuari, profes, assignatures, protocols }} />}
         {vista === "fora" && <ForaHorari {...{ espais, material, reserves, crearReserva, rol, usuari, profes, assignatures, protocols }} />}
@@ -1322,7 +1324,11 @@ function WeekGrid({ entriesFor, hintFor, onCell, clickable, dates, holidayOf, co
 }
 
 /* ---------------- INICI ---------------- */
-function Inici({ reserves, rol }) {
+function Inici({ reserves, rol, usuari }) {
+  // Salutació segons l'hora, amb el nom real de qui ha entrat
+  const h = new Date().getHours();
+  const salutacio = h < 14 ? "Bon dia" : h < 21 ? "Bona tarda" : "Bona nit";
+  const nom = (usuari || "").trim().split(/\s+/)[0] || "";
   const wk = useSetmana();
   const perDia = useMemo(() => {
     const mat = wk.dates.map(() => []); const esp = wk.dates.map(() => []);
@@ -1341,7 +1347,7 @@ function Inici({ reserves, rol }) {
   return (
     <div>
       <div className="hero">
-        <h1>Bon dia, {rol === "Alumne" ? "Laia" : "equip"}.</h1>
+        <h1>{salutacio}{nom ? `, ${nom}` : ""}.</h1>
         <p>Resum setmanal sobre l'horari del centre. Mou-te pel curs 2026-27 amb les fletxes; els festius apareixen marcats.</p>
       </div>
       <div className="legend"><span><i style={{ background: BRAND.blau }} /> Confirmada</span><span><i style={{ background: BRAND.groc }} /> Pendent</span><span><i style={{ background: "#fbeaea" }} /> Festiu</span><span><i style={{ background: "#eef2fb" }} /> Vacances</span></div>
