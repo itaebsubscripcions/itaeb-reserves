@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo, memo, useCallback } from "react";
+import { DEMO, db, entrarAmbGoogle, sortir, onSessio } from "./supabase.js";
 
 /* ============================================================
    ITAEB · Reserves — Prototip funcional (v0.5)
@@ -989,18 +990,8 @@ function festiu(iso) {
   return null;
 }
 
-export default function App() {
-  const [sessio, setSessio] = useState(false);
-  const [rol, setRol] = useState("Professor");
-  const [usuari, setUsuari] = useState("Mireia Devesa");
-  const [vista, setVista] = useState("inici");
-  const [material, setMaterial] = useState(MATERIAL_SEED);
-  const [espais, setEspais] = useState(ESPAIS_SEED);
-  const [profes, setProfes] = useState(PROFES);
-  const [alumnes, setAlumnes] = useState(ALUMNES_SEED);
-  const [assignatures, setAssignatures] = useState(ASSIGNATURES);
-  const setmana = weekDates(INICI_SETMANA);
-  const [reserves, setReserves] = useState([
+function reservesDemo(setmana) {
+  return [
     { id: nextId(), tipus: "material", ref: "SONY-A67", refNom: "Sony a6700", quantitat: 1, sol: "Laia Ferrer", rol: "Alumne", professor: "Mireia Devesa", assignatura: "Presa i edició digital d'imatge", data: setmana[0], torn: "mati", ini: "09:00", fi: "10:50", motiu: "Reportatge", estat: "pendent" },
     { id: nextId(), tipus: "material", ref: "FLX4", refNom: "Controladora DDJ-FLX4", quantitat: 4, sol: "Toni Contreras", rol: "Professor", assignatura: "So en directe", data: setmana[1], torn: "mati", ini: "12:20", fi: "14:10", motiu: "Classe DJ", estat: "confirmada" },
     { id: nextId(), tipus: "material", ref: "ZOOM-H5", refNom: "Zoom H5", quantitat: 2, sol: "Núria Solé", rol: "Professor", assignatura: "Comunicació Audiovisual", data: setmana[3], torn: "tarda", ini: "16:00", fi: "17:50", motiu: "So directe", estat: "confirmada" },
@@ -1011,11 +1002,66 @@ export default function App() {
     { id: nextId(), tipus: "material", ref: "ZOOMH5", refNom: "Zoom H5", quantitat: 1, sol: "Aina Roca", rol: "Alumne", professor: "Mireia Devesa", assignatura: "Comunicació Audiovisual", data: setmana[0], torn: "mati", ini: "09:00", fi: "10:50", motiu: "Enregistrament exterior", estat: "prestec" },
     { id: nextId(), tipus: "material", ref: "ALPHA6700I", refNom: "Sony a6700", quantitat: 1, sol: "Aina Roca", rol: "Alumne", professor: "Mireia Devesa", assignatura: "Comunicació Audiovisual", data: setmana[0], torn: "mati", ini: "09:00", fi: "10:50", motiu: "Enregistrament exterior", estat: "prestec", lot: "Lpres" },
     { id: nextId(), tipus: "material", ref: "BGM113A", refNom: "Blackmagic Pocket Cinema 4K", quantitat: 1, sol: "Aina Roca", rol: "Alumne", professor: "Mireia Devesa", assignatura: "Comunicació Audiovisual", data: setmana[0], torn: "mati", ini: "09:00", fi: "10:50", motiu: "Enregistrament exterior", estat: "prestec", lot: "Lpres" },
-  ]);
+  ];
+}
+
+export default function App() {
+  const [sessio, setSessio] = useState(DEMO ? false : null);
+  const [email, setEmail] = useState("");
+  const [protocols, setProtocols] = useState(DEMO ? PROTOCOLS : {});
+  const [carregant, setCarregant] = useState(false);
+  const [errorBD, setErrorBD] = useState("");
+  const [rol, setRol] = useState("Professor");
+  const [usuari, setUsuari] = useState("Mireia Devesa");
+  const [vista, setVista] = useState("inici");
+  const [material, setMaterial] = useState(DEMO ? MATERIAL_SEED : []);
+  const [espais, setEspais] = useState(DEMO ? ESPAIS_SEED : []);
+  const [profes, setProfes] = useState(DEMO ? PROFES : []);
+  const [alumnes, setAlumnes] = useState(DEMO ? ALUMNES_SEED : []);
+  const [assignatures, setAssignatures] = useState(DEMO ? ASSIGNATURES : []);
+  const setmana = weekDates(INICI_SETMANA);
+  const [reserves, setReserves] = useState(DEMO ? reservesDemo(setmana) : []);
   const [toast, setToast] = useState(null);
   const [scan, setScan] = useState("");
   const [editRes, setEditRes] = useState(null);
   const notifica = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3200); };
+
+  // Sessió real amb Supabase (fora del mode demo)
+  useEffect(() => {
+    if (DEMO) return;
+    return onSessio(async (s) => {
+      if (!s) { setSessio(false); return; }
+      const correu = s.user.email || "";
+      setEmail(correu);
+      try {
+        const p = await db.perfil(correu);
+        setUsuari(p.nom); setRol(p.rol);
+      } catch (e) { setUsuari(correu); setRol("Alumne"); }
+      setSessio(true);
+    });
+  }, []);
+
+  // Càrrega de les dades del centre
+  useEffect(() => {
+    if (DEMO || sessio !== true) return;
+    let viu = true;
+    setCarregant(true);
+    db.carregaTot()
+      .then((d) => {
+        if (!viu) return;
+        setMaterial(d.material); setEspais(d.espais); setProtocols(d.protocols);
+        setAssignatures(d.assignatures); setProfes(d.profes); setAlumnes(d.alumnes);
+        setReserves(d.reserves); setErrorBD("");
+      })
+      .catch((e) => viu && setErrorBD(e.message || "No s'han pogut carregar les dades."))
+      .finally(() => viu && setCarregant(false));
+    return () => { viu = false; };
+  }, [sessio]);
+
+  const refresca = async () => {
+    if (DEMO) return;
+    try { const d = await db.carregaTot(); setMaterial(d.material); setReserves(d.reserves); } catch (e) {}
+  };
 
   const potAprovar = (r) => {
     if (rol === "Administrador") return true;
@@ -1027,13 +1073,21 @@ export default function App() {
   const enPrestec = reserves.filter((r) => r.estat === "prestec");
   const pendentsMeus = pendents.filter(potAprovar);
   const prestecMeus = enPrestec.filter(potAprovar);
-  const resolReserva = (id, estat) => {
+  const resolReserva = async (id, estat) => {
     const e = estat === "confirmada" ? "prestec" : estat;
     setReserves((rs) => rs.map((r) => (r.id === id ? { ...r, estat: e } : r)));
     notifica(e === "prestec" ? "Aprovada. Queda en préstec fins que es registri la devolució." : "Sol·licitud rebutjada. S'ha notificat el sol·licitant.");
+    if (!DEMO) { try { await db.canviaEstat([id], e); } catch (err) { notifica("Error desant: " + err.message); refresca(); } }
   };
-  const registrarRetorn = (ids, resultat, motiuInc = "") => {
+  const registrarRetorn = async (ids, resultat, motiuInc = "") => {
     setReserves((rs) => rs.map((r) => (ids.includes(r.id) ? { ...r, estat: resultat, retornat: avui(), motiuIncidencia: motiuInc } : r)));
+    if (!DEMO) {
+      try {
+        // El trigger de la base de dades ja posa el material en Reparació o Perdut
+        await db.canviaEstat(ids, resultat, { retornat: avui(), motiu_incidencia: motiuInc || null });
+        refresca();
+      } catch (err) { notifica("Error desant: " + err.message); refresca(); }
+    }
     if (resultat === "retornada") notifica(`Devolució correcta registrada (${ids.length}).`);
     else {
       const afectats = reserves.filter((r) => ids.includes(r.id) && r.tipus === "material");
@@ -1044,34 +1098,49 @@ export default function App() {
       notifica(resultat === "trencat" ? "Marcat com a trencat: passa a Reparació." : "Marcat com a desaparegut: passa a Perdut.");
     }
   };
-  const resolMolts = (ids, estat) => {
+  const resolMolts = async (ids, estat) => {
     const e = estat === "confirmada" ? "prestec" : estat;
     setReserves((rs) => rs.map((r) => (ids.includes(r.id) ? { ...r, estat: e } : r)));
     notifica(e === "prestec" ? `Llista aprovada (${ids.length} ítems). En préstec fins a la devolució.` : `Llista rebutjada (${ids.length} ítems).`);
+    if (!DEMO) { try { await db.canviaEstat(ids, e); } catch (err) { notifica("Error desant: " + err.message); refresca(); } }
   };
-  const updateReserva = (id, patch) => { setReserves((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r))); notifica("Reserva actualitzada."); };
-  const anularReserva = (id) => { setReserves((rs) => rs.map((r) => (r.id === id ? { ...r, estat: "anul·lada" } : r))); notifica("Reserva anul·lada. S'ha notificat el sol·licitant."); setEditRes(null); };
-  const crearReserva = (nova) => {
+  const updateReserva = async (id, patch) => {
+    setReserves((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+    notifica("Reserva actualitzada.");
+    if (!DEMO) { try { await db.actualitzaReserva(id, patch); } catch (err) { notifica("Error desant: " + err.message); refresca(); } }
+  };
+  const anularReserva = async (id) => {
+    setReserves((rs) => rs.map((r) => (r.id === id ? { ...r, estat: "anul·lada" } : r)));
+    notifica("Reserva anul·lada. S'ha notificat el sol·licitant."); setEditRes(null);
+    if (!DEMO) { try { await db.canviaEstat([id], "anul·lada"); } catch (err) { notifica("Error desant: " + err.message); refresca(); } }
+  };
+  const crearReserva = async (nova) => {
     let estat = "pendent";
     if (rol === "Administrador") estat = "confirmada";
     else if (rol === "Professor" && !(nova.tipus === "espai" && nova.foraHorari)) estat = "confirmada";
     else if (rol === "Consergeria" && nova.tipus === "espai") estat = "confirmada";
-    const r = { ...nova, id: nextId(), sol: usuari, rol, estat };
+    const r = { ...nova, id: nextId(), sol: usuari, solEmail: email, rol, estat };
     setReserves((rs) => [r, ...rs]);
     notifica(estat === "confirmada" ? "Reserva confirmada." : "Sol·licitud enviada. Pendent d'aprovació.");
     setVista(nova.tipus === "espai" ? "espais" : "material");
+    if (!DEMO) {
+      try { const [creada] = await db.creaReserves([r]); setReserves((rs) => rs.map((x) => (x.id === r.id ? creada : x))); }
+      catch (err) { notifica("Error desant: " + err.message); refresca(); }
+    }
   };
-  const crearReserves = (llista, comuns, origen) => {
+  const crearReserves = async (llista, comuns, origen) => {
     const estat = rol === "Alumne" ? "pendent" : "confirmada";
-    const lot = "L" + nextId();
-    const noves = llista.map((it) => ({ tipus: "material", ref: it.codi, refNom: it.nom, quantitat: it.q || 1, ...comuns, foraHorari: !!it.maleta, origen, lot, id: nextId(), sol: usuari, rol, estat }));
+    const lot = DEMO ? "L" + nextId() : (crypto.randomUUID ? crypto.randomUUID() : "L" + nextId());
+    const noves = llista.map((it) => ({ tipus: "material", ref: it.codi, refNom: it.nom, quantitat: it.q || 1, ...comuns, foraHorari: !!it.maleta, origen, lot, id: nextId(), sol: usuari, solEmail: email, rol, estat }));
     setReserves((rs) => [...noves, ...rs]);
     notifica(rol === "Alumne" ? `Enviat a validar (${noves.length} ítems).` : `Reserva confirmada (${noves.length} ítems).`);
+    if (!DEMO) { try { await db.creaReserves(noves); refresca(); } catch (err) { notifica("Error desant: " + err.message); refresca(); } }
   };
 
   const gestor = rol === "Administrador" || rol === "Consergeria";
   const incidencies = material.filter((m) => m.estat === "Reparació" || m.estat === "Perdut");
 
+  if (sessio === null) return (<div className="app"><style>{css}</style><div className="bootload"><LogoITAEB size={110} ambText={false} /><p>Carregant…</p></div></div>);
   if (!sessio) return (<div className="app"><style>{css}</style><Login onEntrar={() => setSessio(true)} /></div>);
 
   return (
@@ -1084,7 +1153,10 @@ export default function App() {
           <select value={rol} onChange={(e) => { const nr = e.target.value; setRol(nr); setUsuari(nr === "Alumne" ? "Laia Ferrer" : nr === "Consergeria" ? "Consergeria" : nr === "Administrador" ? "Direcció tècnica" : "Mireia Devesa"); if (((nr === "Alumne" || nr === "Professor") && (vista === "admin" || vista === "persones")) || (nr === "Alumne" && (vista === "espais" || vista === "reparacions"))) setVista("inici"); }}>
             {ROLS.map((r) => <option key={r}>{r}</option>)}
           </select>
-          <button className="sortir" title="Tanca la sessió" onClick={() => setSessio(false)}>Surt</button>
+          {DEMO && <span className="pill demo">Mode demo</span>}
+          {carregant && <span className="pill">Carregant…</span>}
+          {errorBD && <span className="pill err" title={errorBD}>Error de dades</span>}
+          <button className="sortir" title="Tanca la sessió" onClick={async () => { await sortir(); setSessio(false); }}>Surt</button>
         </div>
       </header>
       <nav className="tabs">
@@ -1098,8 +1170,8 @@ export default function App() {
       <main className="main">
         {vista === "inici" && <Inici {...{ reserves, rol }} />}
         {vista === "material" && <Material {...{ material, reserves, crearReserves, rol, usuari, profes, alumnes, assignatures, scan, setScan, notifica }} />}
-        {vista === "espais" && rol !== "Alumne" && <Espais {...{ espais, reserves, crearReserva, rol, usuari, profes, assignatures }} />}
-        {vista === "fora" && <ForaHorari {...{ espais, material, reserves, crearReserva, rol, usuari, profes, assignatures }} />}
+        {vista === "espais" && rol !== "Alumne" && <Espais {...{ espais, reserves, crearReserva, rol, usuari, profes, assignatures, protocols }} />}
+        {vista === "fora" && <ForaHorari {...{ espais, material, reserves, crearReserva, rol, usuari, profes, assignatures, protocols }} />}
         {vista === "escaneig" && <Escaneig {...{ material, reserves, crearReserves, rol, usuari, profes, alumnes, assignatures, notifica }} />}
         {vista === "sol.licituds" && <Solicituds {...{ pendents, enPrestec, potAprovar, resolReserva, resolMolts, registrarRetorn, rol }} />}
         {vista === "reparacions" && rol !== "Alumne" && <Reparacions {...{ incidencies, setMaterial, notifica }} />}
@@ -1120,14 +1192,16 @@ function Login({ onEntrar }) {
   const [error, setError] = useState("");
   const [mostraAlt, setMostraAlt] = useState(false);
 
-  const entrarGoogle = () => {
+  const entrarGoogle = async () => {
     setCarregant(true); setError("");
-    // A producció: supabase.auth.signInWithOAuth({ provider:'google', options:{ queryParams:{ hd:'itaeb.cat' } } })
-    setTimeout(() => { setCarregant(false); onEntrar(); }, 900);
+    if (DEMO) { setTimeout(() => { setCarregant(false); onEntrar(); }, 700); return; }
+    const { error: err } = await entrarAmbGoogle();
+    if (err) { setCarregant(false); setError("No s'ha pogut iniciar la sessió: " + err.message); }
   };
   const entrarCorreu = () => {
     const c = correu.trim().toLowerCase();
     if (!c.endsWith("@itaeb.cat")) { setError("Cal un compte del centre acabat en @itaeb.cat"); return; }
+    if (!DEMO) { setError("Fes servir el botó d'entrada amb Google del centre."); return; }
     setError(""); onEntrar();
   };
 
@@ -1600,7 +1674,7 @@ function Escaneig({ material, reserves, crearReserves, rol, usuari, profes, alum
 }
 
 /* ---------------- ESPAIS ---------------- */
-function Espais({ espais, reserves, crearReserva, rol, usuari, profes, assignatures }) {
+function Espais({ espais, reserves, crearReserva, rol, usuari, profes, assignatures, protocols = PROTOCOLS }) {
   const wk = useSetmana();
   const [selNom, setSelNom] = useState(espais.length ? espais[0].nom : "");
   const [obrirForm, setObrirForm] = useState(false);
@@ -1613,7 +1687,7 @@ function Espais({ espais, reserves, crearReserva, rol, usuari, profes, assignatu
     return { lect, res };
   }, [nomSel, reserves, wk.dates]);
   if (!sel) return <Buit>No hi ha espais. Afegeix-ne des d'"Edició pestanyes".</Buit>;
-  const proto = PROTOCOLS[sel.nom];
+  const proto = protocols[sel.nom];
   const entriesFor = (di, f) => [
     ...dadesEspai.lect[di].filter((h) => solapa(h.ini, h.fi, f.ini, f.fi)).map((h) => ({ label: h.label, color: BRAND.negre })),
     ...dadesEspai.res[di].filter((r) => solapa(r.ini, r.fi, f.ini, f.fi)).map((r) => ({ label: `${r.sol} · ${r.motiu || "reserva"}`, color: r.estat === "confirmada" ? BRAND.blau : BRAND.groc })),
@@ -1653,14 +1727,14 @@ function Espais({ espais, reserves, crearReserva, rol, usuari, profes, assignatu
         {proto
           ? <p className="nota" style={{ marginTop: 10 }}>Fora d'horari només es pot reservar a les franges marcades. {proto.nota}</p>
           : <p className="nota" style={{ marginTop: 10 }}>Horari lectiu d'exemple: s'omplirà des del full d'horaris del centre.</p>}
-        {obrirForm && <FormEspai e={sel} rol={rol} usuari={usuari} preset={preset} profes={profes} assignatures={assignatures} onClose={() => setObrirForm(false)} onSubmit={crearReserva} />}
+        {obrirForm && <FormEspai e={sel} rol={rol} usuari={usuari} preset={preset} profes={profes} assignatures={assignatures} protocols={protocols} onClose={() => setObrirForm(false)} onSubmit={crearReserva} />}
       </section>
     </div>
   );
 }
 
-function FormEspai({ e, rol, usuari, preset, onClose, onSubmit, profes = PROFES, assignatures = ASSIGNATURES }) {
-  const proto = PROTOCOLS[e.nom];
+function FormEspai({ e, rol, usuari, preset, onClose, onSubmit, profes = PROFES, assignatures = ASSIGNATURES, protocols = PROTOCOLS }) {
+  const proto = protocols[e.nom];
   const fora = !!proto;
   const esAlumne = rol === "Alumne";
   const initSlot = fora ? (preset?.slotIdx ?? 0) : 0;
@@ -1708,7 +1782,7 @@ function FormEspai({ e, rol, usuari, preset, onClose, onSubmit, profes = PROFES,
 }
 
 /* ---------------- FORA D'HORARI ---------------- */
-function ForaHorari({ espais, material, reserves, crearReserva, rol, usuari, profes, assignatures }) {
+function ForaHorari({ espais, material, reserves, crearReserva, rol, usuari, profes, assignatures, protocols = PROTOCOLS }) {
   const aules = useMemo(() => espais.filter((e) => e.foraHorari), [espais]);
   const maletes = useMemo(() => material.filter((m) => m.maleta), [material]);
   const ocupacioFora = useMemo(() => {
@@ -1727,7 +1801,7 @@ function ForaHorari({ espais, material, reserves, crearReserva, rol, usuari, pro
       <h2 className="h2">Aules disponibles fora d'horari</h2>
       <div className="grid">
         {aules.map((e) => {
-          const p = PROTOCOLS[e.nom];
+          const p = protocols[e.nom];
           return (
             <button key={e.nom} className="card" onClick={() => setSel(e)}>
               <div className="card-top"><span className="codi">Aula</span>{p && <span className="badge" style={{ background: BRAND.groc }}>Màx. {p.max}</span>}</div>
@@ -1749,7 +1823,7 @@ function ForaHorari({ espais, material, reserves, crearReserva, rol, usuari, pro
           );
         })}
       </div>
-      {sel && <FormEspai e={sel} rol={rol} usuari={usuari} profes={profes} assignatures={assignatures} onClose={() => setSel(null)} onSubmit={crearReserva} />}
+      {sel && <FormEspai e={sel} rol={rol} usuari={usuari} profes={profes} assignatures={assignatures} protocols={protocols} onClose={() => setSel(null)} onSubmit={crearReserva} />}
       {selM && <FormMaterial m={selM} rol={rol} usuari={usuari} profes={profes} assignatures={assignatures} onClose={() => setSelM(null)} onSubmit={crearReserva} />}
     </div>
   );
@@ -1874,9 +1948,17 @@ function Reparacions({ incidencies, setMaterial, notifica }) {
   const resoldre = (codi) => {
     setMaterial((ms) => ms.map((m) => (m.codi === codi ? { ...m, estat: "Disponible", incidencia: undefined } : m)));
     notifica("Incidència resolta: el material torna a estar disponible.");
+    if (!DEMO) db.actualitzaMaterial(codi, { estat: "Disponible", incidencia: null }).catch((e) => notifica("Error desant: " + e.message));
   };
-  const canviaEstat = (codi, estat) => setMaterial((ms) => ms.map((m) => (m.codi === codi ? { ...m, estat } : m)));
-  const nota = (codi, v) => setMaterial((ms) => ms.map((m) => (m.codi === codi ? { ...m, incidencia: { ...(m.incidencia || {}), nota: v } } : m)));
+  const canviaEstat = (codi, estat) => {
+    setMaterial((ms) => ms.map((m) => (m.codi === codi ? { ...m, estat } : m)));
+    if (!DEMO) db.actualitzaMaterial(codi, { estat }).catch((e) => notifica("Error desant: " + e.message));
+  };
+  const nota = (codi, v) => {
+    let nova = null;
+    setMaterial((ms) => ms.map((m) => { if (m.codi !== codi) return m; nova = { ...(m.incidencia || {}), nota: v }; return { ...m, incidencia: nova }; }));
+    if (!DEMO) clearTimeout(nota._t), (nota._t = setTimeout(() => db.actualitzaMaterial(codi, { incidencia: nova }).catch(() => {}), 800));
+  };
   const nRep = incidencies.filter((m) => m.estat === "Reparació").length;
   const nPer = incidencies.filter((m) => m.estat === "Perdut").length;
   return (
@@ -1978,11 +2060,13 @@ function Admin({ material, setMaterial, notifica }) {
   const afegir = () => {
     if (!nou.codi || !nou.nom) return notifica("Cal com a mínim CODI i nom.");
     if (material.some((m) => m.codi === nou.codi)) return notifica("Ja existeix aquest CODI.");
-    setMaterial((m) => [{ ...nou, unitats: +nou.unitats || 1, estat: "Disponible" }, ...m]);
+    const nouMat = { ...nou, unitats: +nou.unitats || 1, estat: "Disponible" };
+    setMaterial((m) => [nouMat, ...m]);
     setNou({ codi: "", nom: "", cat: "Vídeo", marca: "", unitats: 1, ubic: "", codiBarres: "" }); notifica("Material afegit.");
+    if (!DEMO) db.afegeixMaterial(nouMat).catch((e) => notifica("Error desant: " + e.message));
   };
-  const eliminar = (codi) => { setMaterial((m) => m.filter((x) => x.codi !== codi)); notifica("Material eliminat."); };
-  const upd = (codi, patch) => setMaterial((m) => m.map((x) => (x.codi === codi ? { ...x, ...patch } : x)));
+  const eliminar = (codi) => { setMaterial((m) => m.filter((x) => x.codi !== codi)); notifica("Material eliminat."); if (!DEMO) db.esborraMaterial(codi).catch((e) => notifica("Error desant: " + e.message)); };
+  const upd = (codi, patch) => { setMaterial((m) => m.map((x) => (x.codi === codi ? { ...x, ...patch } : x))); if (!DEMO) db.actualitzaMaterial(codi, patch).catch((e) => notifica("Error desant: " + e.message)); };
 
   const COLS = ["codi", "qr", "nom", "cat", "marca", "unitats", "ubic", "estat", "codiBarres"];
   const exportaCSV = async () => {
@@ -2043,6 +2127,7 @@ function Admin({ material, setMaterial, notifica }) {
       return [...afegits, ...actualitzat];
     });
     notifica(`Importació aplicada: ${previsualitza.nous} nous, ${previsualitza.actualitzats} actualitzats.`);
+    if (!DEMO) db.importaMaterial(nets).catch((e) => notifica("Error desant: " + e.message));
     setPrevisualitza(null);
   };
 
@@ -2218,11 +2303,13 @@ function EditEspais({ espais, setEspais, notifica }) {
     const nom = nou.nom.trim(); if (!nom) return notifica("Cal un nom d'espai.");
     if (espais.some((e) => e.nom === nom)) return notifica("Ja existeix aquest espai.");
     if (nou.foraHorari && !PROTOCOLS[nom]) notifica("Espai afegit. Recorda definir-ne les franges de protocol.");
-    setEspais([...espais, { nom, equipament: nou.equipament.trim(), foraHorari: nou.foraHorari }]);
+    const nouEspai = { nom, equipament: nou.equipament.trim(), foraHorari: nou.foraHorari };
+    setEspais([...espais, nouEspai]);
     setNou({ nom: "", equipament: "", foraHorari: false });
+    if (!DEMO) db.desaEspais([nouEspai]).catch((e) => notifica("Error desant: " + e.message));
   };
   const upd = (i, patch) => setEspais(espais.map((e, j) => (j === i ? { ...e, ...patch } : e)));
-  const treu = (i) => { setEspais(espais.filter((_, j) => j !== i)); notifica("Espai eliminat."); };
+  const treu = (i) => { const e0 = espais[i]; setEspais(espais.filter((_, j) => j !== i)); notifica("Espai eliminat."); if (!DEMO) db.esborraEspai(e0.nom).catch((e) => notifica("Error desant: " + e.message)); };
   return (
     <div className="editlist">
       <div className="cat-t">Espais ({espais.length})</div>
@@ -2644,6 +2731,10 @@ const css = `
 .login-err { color:${BRAND.vermell}; font-size:12.5px; margin:-4px 0 10px; }
 .login-ajuda { margin-top:26px; font-size:12px; color:#999; text-align:center; line-height:1.6; }
 .login-foot { font-size:11.5px; color:#bbb; text-align:center; }
+.bootload { min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; color:#999; font-size:13px; }
+.pill { font-size:11px; font-weight:700; padding:3px 9px; border-radius:20px; background:#f2f2f2; color:#777; white-space:nowrap; }
+.pill.demo { background:${BRAND.groc}22; color:#96731a; }
+.pill.err { background:#fdecec; color:${BRAND.vermell}; cursor:help; }
 .sortir { border:1px solid #e2e2e2; background:#fff; color:#666; border-radius:8px; padding:7px 11px; font-size:12.5px; cursor:pointer; }
 .sortir:hover { border-color:${BRAND.vermell}; color:${BRAND.vermell}; }
 @media (max-width:760px){ .login{grid-template-columns:1fr;} .login-brand{padding:30px 24px; gap:16px;} .login-brand svg{width:130px;height:auto;} }
