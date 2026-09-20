@@ -1387,30 +1387,55 @@ const LlistaMaterial = memo(function LlistaMaterial({ material, ocupacio, onAdd,
     if (q) base = base.filter((m) => m.nom.toLowerCase().includes(q) || m.codi.toLowerCase().includes(q) || (m.marca || "").toLowerCase().includes(q));
     return base;
   }, [material, cerca, cat]);
-  const [limit, setLimit] = useState(60);
-  useEffect(() => { setLimit(60); }, [cerca, cat]);
-  const mostra = visibles.slice(0, limit);
+
+  // Categories amb el seu material i el recompte d'unitats lliures
   const grups = useMemo(() => {
     const g = new Map();
-    mostra.forEach((m) => { if (!g.has(m.cat)) g.set(m.cat, []); g.get(m.cat).push(m); });
-    return [...g.entries()];
-  }, [mostra]);
+    visibles.forEach((m) => { if (!g.has(m.cat)) g.set(m.cat, []); g.get(m.cat).push(m); });
+    return [...g.entries()].map(([c, items]) => ({
+      cat: c, items,
+      lliures: items.reduce((a, m) => a + ((m.estat === "Reparació" || m.estat === "Perdut") ? 0 : Math.max(0, m.unitats - (ocupacio.get(m.codi) || 0))), 0),
+    }));
+  }, [visibles, ocupacio]);
+
+  const [obertes, setObertes] = useState(() => new Set());
+  const cercant = cerca.trim().length > 0 || cat !== "*";
+  // En cercar o filtrar per categoria, s'obren soles per veure els resultats
+  useEffect(() => { if (cercant) setObertes(new Set(grups.map((g) => g.cat))); else setObertes(new Set()); }, [cerca, cat]);
+
+  const alterna = (c) => setObertes((o) => { const n = new Set(o); n.has(c) ? n.delete(c) : n.add(c); return n; });
+  const totes = () => setObertes(new Set(grups.map((g) => g.cat)));
+  const cap = () => setObertes(new Set());
+
   return (
     <>
-      <p className="nota">{visibles.length} referències{visibles.length > limit ? ` · mostrant-ne ${limit}` : ""}. Toca un material per afegir-lo a la cistella.</p>
-      {grups.map(([c, items]) => (
-        <div key={c} className="catblock">
-          <div className="cat-t">{c}</div>
-          <div className="mlist">
-            {items.map((m) => <MRow key={m.codi} m={m} lliures={Math.max(0, m.unitats - (ocupacio.get(m.codi) || 0))} onAdd={onAdd} />)}
-          </div>
+      <div className="catbar">
+        <span className="nota" style={{ margin: 0 }}>{visibles.length} referències en {grups.length} categories</span>
+        <div className="toolbar">
+          <button className="btn ghost sm" onClick={totes}>Desplega-ho tot</button>
+          <button className="btn ghost sm" onClick={cap}>Plega-ho tot</button>
         </div>
-      ))}
-      {visibles.length > limit && (
-        <button className="btn ghost" style={{ width: "100%", marginTop: 12 }} onClick={() => setLimit((l) => l + 120)}>
-          Mostra'n més ({visibles.length - limit} restants)
-        </button>
-      )}
+      </div>
+      <div className="accord">
+        {grups.map(({ cat: c, items, lliures }) => {
+          const obert = obertes.has(c);
+          return (
+            <div key={c} className={"accitem" + (obert ? " on" : "")}>
+              <button className="acchead" onClick={() => alterna(c)} aria-expanded={obert}>
+                <span className={"accfletxa" + (obert ? " on" : "")}>›</span>
+                <span className="accnom">{c}</span>
+                <span className="acccount">{items.length} refs</span>
+                <span className="acclliures"><b style={{ color: lliures ? BRAND.blau : BRAND.vermell }}>{lliures}</b> lliures</span>
+              </button>
+              {obert && (
+                <div className="mlist accbody">
+                  {items.map((m) => <MRow key={m.codi} m={m} lliures={Math.max(0, m.unitats - (ocupacio.get(m.codi) || 0))} onAdd={onAdd} />)}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
       {visibles.length === 0 && <Buit>Cap material coincideix amb la cerca.</Buit>}
     </>
   );
@@ -2588,6 +2613,19 @@ const css = `
 .badge { color:#fff; font-size:10px; font-weight:700; padding:2px 7px; border-radius:20px; }
 .estat { font-size:10.5px; font-weight:700; padding:2px 8px; border:1px solid; border-radius:20px; text-transform:capitalize; white-space:nowrap; }
 .mlist { border:1px solid #eee; border-radius:11px; overflow:hidden; }
+.catbar { display:flex; justify-content:space-between; align-items:center; gap:12px; margin:10px 0; flex-wrap:wrap; }
+.accord { display:flex; flex-direction:column; gap:8px; }
+.accitem { border:1px solid #e9e9e9; border-radius:11px; overflow:hidden; background:#fff; }
+.accitem.on { border-color:${BRAND.blau}55; box-shadow:0 1px 8px rgba(0,0,0,.04); }
+.acchead { width:100%; display:flex; align-items:center; gap:12px; padding:13px 15px; border:0; background:#fff; cursor:pointer; text-align:left; }
+.acchead:hover { background:#f6fbfe; }
+.accitem.on .acchead { background:${BRAND.blau}0d; border-bottom:1px solid #f0f0f0; }
+.accfletxa { color:#bbb; font-size:19px; line-height:1; transition:transform .15s; flex:none; }
+.accfletxa.on { transform:rotate(90deg); color:${BRAND.blau}; }
+.accnom { flex:1; font-weight:700; font-size:14px; }
+.acccount { font-size:11.5px; color:#999; white-space:nowrap; }
+.acclliures { font-size:12px; color:#777; white-space:nowrap; min-width:74px; text-align:right; }
+.accbody { border:0; border-radius:0; }
 .mrow { width:100%; display:flex; align-items:center; gap:12px; padding:10px 14px; border:0; border-bottom:1px solid #f4f4f4; background:#fff; cursor:pointer; text-align:left; }
 .mrow:last-child { border-bottom:0; }
 .mrow:hover { background:#f6fbfe; }
