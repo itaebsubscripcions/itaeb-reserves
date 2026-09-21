@@ -1192,21 +1192,13 @@ export default function App() {
 /* ---------------- LOGIN ---------------- */
 function Login({ onEntrar }) {
   const [carregant, setCarregant] = useState(false);
-  const [correu, setCorreu] = useState("");
   const [error, setError] = useState("");
-  const [mostraAlt, setMostraAlt] = useState(false);
 
   const entrarGoogle = async () => {
     setCarregant(true); setError("");
     if (DEMO) { setTimeout(() => { setCarregant(false); onEntrar(); }, 700); return; }
     const { error: err } = await entrarAmbGoogle();
     if (err) { setCarregant(false); setError("No s'ha pogut iniciar la sessió: " + err.message); }
-  };
-  const entrarCorreu = () => {
-    const c = correu.trim().toLowerCase();
-    if (!c.endsWith("@itaeb.cat")) { setError("Cal un compte del centre acabat en @itaeb.cat"); return; }
-    if (!DEMO) { setError("Fes servir el botó d'entrada amb Google del centre."); return; }
-    setError(""); onEntrar();
   };
 
   return (
@@ -1235,25 +1227,9 @@ function Login({ onEntrar }) {
             {carregant ? "Connectant…" : "Entra amb Google"}
           </button>
 
+          {error && <p className="login-err" style={{ marginTop: 12 }}>{error}</p>}
           <div className="login-dom"><b>Només comptes @itaeb.cat</b> · alumnat, professorat, consergeria i direcció</div>
 
-          <div className="login-sep"><span>o bé</span></div>
-
-          {!mostraAlt ? (
-            <button className="login-link" onClick={() => setMostraAlt(true)}>Entra amb correu i contrasenya</button>
-          ) : (
-            <div className="login-alt">
-              <Camp l="Correu del centre">
-                <input type="email" placeholder="nom@itaeb.cat" value={correu}
-                  onChange={(e) => { setCorreu(e.target.value); setError(""); }}
-                  onKeyDown={(e) => e.key === "Enter" && entrarCorreu()} />
-              </Camp>
-              <Camp l="Contrasenya"><input type="password" placeholder="••••••••" onKeyDown={(e) => e.key === "Enter" && entrarCorreu()} /></Camp>
-              {error && <p className="login-err">{error}</p>}
-              <button className="btn prim" style={{ width: "100%" }} onClick={entrarCorreu}>Entra</button>
-              <button className="login-link" style={{ marginTop: 10 }} onClick={() => setMostraAlt(false)}>Torna</button>
-            </div>
-          )}
 
           
         </div>
