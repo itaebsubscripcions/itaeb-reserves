@@ -1010,6 +1010,7 @@ export default function App() {
   const [email, setEmail] = useState("");
   const [protocols, setProtocols] = useState(DEMO ? PROTOCOLS : {});
   const [horari, setHorari] = useState(DEMO ? HORARI_LECTIU : []);
+  const [assigProfs, setAssigProfs] = useState({});
   const [carregant, setCarregant] = useState(false);
   const [errorBD, setErrorBD] = useState("");
   const [rol, setRol] = useState("Professor");
@@ -1054,7 +1055,7 @@ export default function App() {
         if (!viu) return;
         setMaterial(d.material); setEspais(d.espais); setProtocols(d.protocols);
         setAssignatures(d.assignatures); setProfes(d.profes); setAlumnes(d.alumnes);
-        setReserves(d.reserves); setHorari(d.horari || []); setErrorBD("");
+        setReserves(d.reserves); setHorari(d.horari || []); setAssigProfs(d.assigProfs || {}); setErrorBD("");
       })
       .catch((e) => viu && setErrorBD(e.message || "No s'han pogut carregar les dades."))
       .finally(() => viu && setCarregant(false));
@@ -1172,10 +1173,10 @@ export default function App() {
       </nav>
       <main className="main">
         {vista === "inici" && <Inici {...{ reserves, rol, usuari }} />}
-        {vista === "material" && <Material {...{ material, reserves, crearReserves, rol, usuari, profes, alumnes, assignatures, scan, setScan, notifica }} />}
-        {vista === "espais" && rol !== "Alumne" && <Espais {...{ espais, reserves, crearReserva, rol, usuari, profes, assignatures, protocols, horari }} />}
-        {vista === "fora" && <ForaHorari {...{ espais, material, reserves, crearReserva, rol, usuari, profes, assignatures, protocols }} />}
-        {vista === "escaneig" && <Escaneig {...{ material, reserves, crearReserves, rol, usuari, profes, alumnes, assignatures, notifica }} />}
+        {vista === "material" && <Material {...{ material, reserves, crearReserves, rol, usuari, profes, alumnes, assignatures, assigProfs, scan, setScan, notifica }} />}
+        {vista === "espais" && rol !== "Alumne" && <Espais {...{ espais, reserves, crearReserva, rol, usuari, profes, assignatures, assigProfs, protocols, horari }} />}
+        {vista === "fora" && <ForaHorari {...{ espais, material, reserves, crearReserva, rol, usuari, profes, assignatures, assigProfs, protocols }} />}
+        {vista === "escaneig" && <Escaneig {...{ material, reserves, crearReserves, rol, usuari, profes, alumnes, assignatures, assigProfs, notifica }} />}
         {vista === "sol.licituds" && <Solicituds {...{ pendents, enPrestec, potAprovar, resolReserva, resolMolts, registrarRetorn, rol }} />}
         {vista === "reparacions" && rol !== "Alumne" && <Reparacions {...{ incidencies, setMaterial, notifica }} />}
         {vista === "historial" && <Historial reserves={reserves} onEdit={setEditRes} />}
@@ -1442,7 +1443,7 @@ const LlistaMaterial = memo(function LlistaMaterial({ material, ocupacio, onAdd,
   );
 });
 
-function Material({ material, reserves, crearReserves, rol, usuari, profes, alumnes, assignatures, scan, setScan, notifica }) {
+function Material({ material, reserves, crearReserves, rol, usuari, profes, alumnes, assignatures, assigProfs = {}, scan, setScan, notifica }) {
   const ocupacio = useMemo(() => {
     const idx = new Map();
     for (const r of reserves) if (r.tipus === "material" && esActiva(r)) idx.set(r.ref, (idx.get(r.ref) || 0) + (r.quantitat || 1));
@@ -1457,7 +1458,7 @@ function Material({ material, reserves, crearReserves, rol, usuari, profes, alum
   const [torn, setTorn] = useState("mati");
   const [ini, setIni] = useState("09:00");
   const [fi, setFi] = useState("10:50");
-  const [assig, setAssig] = useState(assignatures[0]);
+  const [assig, setAssig] = useState("");
   const [profs, setProfs] = useState([]);
   const [profsRec, setProfsRec] = useState([]);
   const [respAlumne, setRespAlumne] = useState(null);
@@ -1518,7 +1519,7 @@ function Material({ material, reserves, crearReserves, rol, usuari, profes, alum
         </div>
         {cart.length > 0 && (
           <div className="finalize">
-            <Camp l="Assignatura"><select value={assig} onChange={(e) => setAssig(e.target.value)}>{assignatures.map((a) => <option key={a}>{a}</option>)}</select></Camp>
+            <Camp l="Assignatura"><AssigSelect assignatures={assignatures} value={assig} onChange={(v) => { setAssig(v); const p = (assigProfs[v] || []).slice(0, 3); setProfs(p); setProfsRec(p); }} /></Camp>
             <ProfPicker profes={profes} sel={profs} setSel={setProfs} label="Professor/a Entrega" />
             <ProfPicker profes={profes} sel={profsRec} setSel={setProfsRec} label="Professor/a Recollida" />
             {!esAlumne && <AlumnePicker alumnes={alumnes} sel={respAlumne} setSel={setRespAlumne} label="Alumne/a responsable de la reserva" />}
@@ -1535,14 +1536,14 @@ function Material({ material, reserves, crearReserves, rol, usuari, profes, alum
   );
 }
 
-function FormMaterial({ m, rol, usuari, onClose, onSubmit, profes = PROFES, assignatures = ASSIGNATURES }) {
+function FormMaterial({ m, rol, usuari, onClose, onSubmit, profes = PROFES, assignatures = ASSIGNATURES, assigProfs = {} }) {
   const [q, setQ] = useState(1);
   const [data, setData] = useState(avui());
   const [torn, setTorn] = useState("mati");
   const [ini, setIni] = useState("09:00");
   const [fi, setFi] = useState("10:50");
   const [motiu, setMotiu] = useState("");
-  const [assig, setAssig] = useState(assignatures[0]);
+  const [assig, setAssig] = useState("");
   const [profs, setProfs] = useState([]);
   const [profsRec, setProfsRec] = useState([]);
   const esAlumne = rol === "Alumne";
@@ -1550,7 +1551,7 @@ function FormMaterial({ m, rol, usuari, onClose, onSubmit, profes = PROFES, assi
     <Modal onClose={onClose} titol={`Reservar · ${m.nom}`}>
       <p className="modal-sub">{m.codi} · {m.marca} · {m.ubic}</p>
       <Camp l="Unitats"><input type="number" min="1" max={m.unitats} value={q} onChange={(e) => setQ(+e.target.value)} /></Camp>
-      <Camp l="Assignatura"><select value={assig} onChange={(e) => setAssig(e.target.value)}>{assignatures.map((a) => <option key={a}>{a}</option>)}</select></Camp>
+      <Camp l="Assignatura"><AssigSelect assignatures={assignatures} value={assig} onChange={(v) => { setAssig(v); const p = (assigProfs[v] || []).slice(0, 3); setProfs(p); setProfsRec(p); }} /></Camp>
       <ProfPicker profes={profes} sel={profs} setSel={setProfs} label="Professor/a Entrega" />
       <ProfPicker profes={profes} sel={profsRec} setSel={setProfsRec} label="Professor/a Recollida" />
       <Camp l="Data"><input type="date" value={data} onChange={(e) => setData(e.target.value)} /></Camp>
@@ -1566,7 +1567,7 @@ function FormMaterial({ m, rol, usuari, onClose, onSubmit, profes = PROFES, assi
 }
 
 /* ---------------- ESCANEIG (càmera del mòbil) ---------------- */
-function Escaneig({ material, reserves, crearReserves, rol, usuari, profes, alumnes, assignatures, notifica }) {
+function Escaneig({ material, reserves, crearReserves, rol, usuari, profes, alumnes, assignatures, assigProfs = {}, notifica }) {
   const videoRef = useRef(null); const streamRef = useRef(null); const rafRef = useRef(0); const lastRef = useRef({ code: "", t: 0 });
   const [estat, setEstat] = useState("init");
   const [msg, setMsg] = useState("Preparant la càmera…");
@@ -1576,7 +1577,7 @@ function Escaneig({ material, reserves, crearReserves, rol, usuari, profes, alum
   const [torn, setTorn] = useState("mati");
   const [ini, setIni] = useState("09:00");
   const [fi, setFi] = useState("10:50");
-  const [assig, setAssig] = useState(assignatures[0]);
+  const [assig, setAssig] = useState("");
   const [profs, setProfs] = useState([]);
   const [profsRec, setProfsRec] = useState([]);
   const [respAlumne, setRespAlumne] = useState(null);
@@ -1688,7 +1689,7 @@ function Escaneig({ material, reserves, crearReserves, rol, usuari, profes, alum
           </div>
           {llista.length > 0 && (
             <div className="finalize">
-              <Camp l="Assignatura"><select value={assig} onChange={(e) => setAssig(e.target.value)}>{assignatures.map((a) => <option key={a}>{a}</option>)}</select></Camp>
+              <Camp l="Assignatura"><AssigSelect assignatures={assignatures} value={assig} onChange={(v) => { setAssig(v); const p = (assigProfs[v] || []).slice(0, 3); setProfs(p); setProfsRec(p); }} /></Camp>
               <ProfPicker profes={profes} sel={profs} setSel={setProfs} label="Professor/a Entrega" />
               <ProfPicker profes={profes} sel={profsRec} setSel={setProfsRec} label="Professor/a Recollida" />
               {!esAlumne && <AlumnePicker alumnes={alumnes} sel={respAlumne} setSel={setRespAlumne} label="Alumne/a responsable de la reserva" />}
@@ -1706,7 +1707,7 @@ function Escaneig({ material, reserves, crearReserves, rol, usuari, profes, alum
 }
 
 /* ---------------- ESPAIS ---------------- */
-function Espais({ espais, reserves, crearReserva, rol, usuari, profes, assignatures, protocols = PROTOCOLS, horari = HORARI_LECTIU }) {
+function Espais({ espais, reserves, crearReserva, rol, usuari, profes, assignatures, assigProfs = {}, protocols = PROTOCOLS, horari = HORARI_LECTIU }) {
   const wk = useSetmana();
   const [selNom, setSelNom] = useState(espais.length ? espais[0].nom : "");
   const [obrirForm, setObrirForm] = useState(false);
@@ -1761,13 +1762,13 @@ function Espais({ espais, reserves, crearReserva, rol, usuari, profes, assignatu
         {proto
           ? <p className="nota" style={{ marginTop: 10 }}>Fora d'horari només es pot reservar a les franges marcades. {proto.nota}</p>
           : <p className="nota" style={{ marginTop: 10 }}>Les franges amb classe lectiva apareixen en negre i no es poden reservar.</p>}
-        {obrirForm && <FormEspai e={sel} rol={rol} usuari={usuari} preset={preset} profes={profes} assignatures={assignatures} protocols={protocols} onClose={() => setObrirForm(false)} onSubmit={crearReserva} />}
+        {obrirForm && <FormEspai e={sel} rol={rol} usuari={usuari} preset={preset} profes={profes} assignatures={assignatures} assigProfs={assigProfs} protocols={protocols} onClose={() => setObrirForm(false)} onSubmit={crearReserva} />}
       </section>
     </div>
   );
 }
 
-function FormEspai({ e, rol, usuari, preset, onClose, onSubmit, profes = PROFES, assignatures = ASSIGNATURES, protocols = PROTOCOLS }) {
+function FormEspai({ e, rol, usuari, preset, onClose, onSubmit, profes = PROFES, assignatures = ASSIGNATURES, assigProfs = {}, protocols = PROTOCOLS }) {
   const proto = protocols[e.nom];
   const fora = !!proto;
   const esAlumne = rol === "Alumne";
@@ -1780,13 +1781,13 @@ function FormEspai({ e, rol, usuari, preset, onClose, onSubmit, profes = PROFES,
   const [persones, setPersones] = useState(2);
   const [periodica, setPeriodica] = useState(false);
   const [motiu, setMotiu] = useState("");
-  const [assig, setAssig] = useState(assignatures[0]);
+  const [assig, setAssig] = useState("");
   const [profs, setProfs] = useState([]);
   const triaSlot = (idx) => { setSlotIdx(idx); const s = proto.slots[idx]; setIni(s.ini); setFi(s.fi); setData(nextDateForDay(DIES.indexOf(s.dia))); };
   return (
     <Modal onClose={onClose} titol={`Reservar · ${e.nom}`}>
       <p className="modal-sub">{e.equipament}</p>
-      <Camp l="Assignatura"><select value={assig} onChange={(ev) => setAssig(ev.target.value)}>{assignatures.map((a) => <option key={a}>{a}</option>)}</select></Camp>
+      <Camp l="Assignatura"><AssigSelect assignatures={assignatures} value={assig} onChange={(v) => { setAssig(v); setProfs((assigProfs[v] || []).slice(0, 3)); }} /></Camp>
       <ProfPicker profes={profes} sel={profs} setSel={setProfs} label="Professor/a Entrega" />
       {fora ? (
         <>
@@ -1816,7 +1817,7 @@ function FormEspai({ e, rol, usuari, preset, onClose, onSubmit, profes = PROFES,
 }
 
 /* ---------------- FORA D'HORARI ---------------- */
-function ForaHorari({ espais, material, reserves, crearReserva, rol, usuari, profes, assignatures, protocols = PROTOCOLS }) {
+function ForaHorari({ espais, material, reserves, crearReserva, rol, usuari, profes, assignatures, assigProfs = {}, protocols = PROTOCOLS }) {
   const aules = useMemo(() => espais.filter((e) => e.foraHorari), [espais]);
   const maletes = useMemo(() => material.filter((m) => m.maleta), [material]);
   const ocupacioFora = useMemo(() => {
@@ -1857,8 +1858,8 @@ function ForaHorari({ espais, material, reserves, crearReserva, rol, usuari, pro
           );
         })}
       </div>
-      {sel && <FormEspai e={sel} rol={rol} usuari={usuari} profes={profes} assignatures={assignatures} protocols={protocols} onClose={() => setSel(null)} onSubmit={crearReserva} />}
-      {selM && <FormMaterial m={selM} rol={rol} usuari={usuari} profes={profes} assignatures={assignatures} onClose={() => setSelM(null)} onSubmit={crearReserva} />}
+      {sel && <FormEspai e={sel} rol={rol} usuari={usuari} profes={profes} assignatures={assignatures} assigProfs={assigProfs} protocols={protocols} onClose={() => setSel(null)} onSubmit={crearReserva} />}
+      {selM && <FormMaterial m={selM} rol={rol} usuari={usuari} profes={profes} assignatures={assignatures} assigProfs={assigProfs} onClose={() => setSelM(null)} onSubmit={crearReserva} />}
     </div>
   );
 }
@@ -2447,6 +2448,30 @@ function Estat({ estat, label }) {
   const map = { Disponible: BRAND.blau, Confirmada: BRAND.blau, Retornada: "#1f9d55", "En préstec": "#7a5cc4", Prestat: BRAND.vermell, Trencat: BRAND.vermell, Desaparegut: BRAND.vermell, "Reparació": BRAND.negre, Perdut: "#8a6d3b", Pendent: BRAND.groc, Rebutjada: BRAND.vermell, "Anul·lada": "#9aa0a6" };
   return <span className="estat" style={{ color: map[estat] || BRAND.negre, borderColor: map[estat] || BRAND.negre }}>{label || estat}</span>;
 }
+function AssigSelect({ assignatures, value, onChange }) {
+  // Agrupa "Assignatura · Grup" per grup, per trobar-la de pressa entre 135
+  const grups = useMemo(() => {
+    const g = new Map();
+    assignatures.forEach((a) => {
+      const i = a.lastIndexOf(" · ");
+      const gr = i > 0 ? a.slice(i + 3) : "Altres";
+      if (!g.has(gr)) g.set(gr, []);
+      g.get(gr).push(a);
+    });
+    return [...g.entries()];
+  }, [assignatures]);
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)}>
+      <option value="">— Tria l'assignatura —</option>
+      {grups.map(([gr, llista]) => (
+        <optgroup key={gr} label={gr}>
+          {llista.map((a) => { const i = a.lastIndexOf(" · "); return <option key={a} value={a}>{i > 0 ? a.slice(0, i) : a}</option>; })}
+        </optgroup>
+      ))}
+    </select>
+  );
+}
+
 function AlumnePicker({ alumnes, sel, setSel, label }) {
   const [q, setQ] = useState("");
   const [obert, setObert] = useState(false);

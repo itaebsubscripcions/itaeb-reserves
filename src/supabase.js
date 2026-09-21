@@ -83,7 +83,7 @@ export const db = {
       supabase.from("material").select("*").order("categoria").order("nom"),
       supabase.from("espais").select("*").order("nom"),
       supabase.from("protocols").select("*"),
-      supabase.from("assignatures").select("nom").order("nom"),
+      supabase.from("assignatures").select("nom, professors"),
       supabase.from("usuaris").select("email, nom, rol, grup").order("nom"),
       supabase.from("reserves").select("*").order("data", { ascending: false }).limit(2000),
       supabase.from("horari_lectiu").select("*"),
@@ -100,6 +100,7 @@ export const db = {
       espais: (esp.data || []).map((e) => ({ nom: e.nom, equipament: e.equipament || "", foraHorari: !!e.fora_horari })),
       protocols,
       assignatures: (ass.data || []).map((a) => a.nom),
+      assigProfs: Object.fromEntries((ass.data || []).map((a) => [a.nom, a.professors || []])),
       profes: usuaris.filter((u) => u.rol === "professor").map((u) => ({ nom: u.nom, email: u.email })),
       alumnes: usuaris.filter((u) => u.rol === "alumne").map((u) => ({ nom: u.nom, email: u.email, grup: u.grup || "" })),
       reserves: (res.data || []).map(resDeDB),
@@ -178,9 +179,12 @@ export const db = {
     if (error) throw error;
   },
   async desaAssignatures(noms) {
-    await supabase.from("assignatures").delete().neq("nom", "");
-    const { error } = await supabase.from("assignatures").insert(noms.map((n) => ({ nom: n })));
-    if (error) throw error;
+    // Conserva el professorat de les que ja existien; només afegeix o treu noms
+    const { error: e1 } = await supabase.from("assignatures").upsert(noms.map((n) => ({ nom: n })), { onConflict: "nom", ignoreDuplicates: true });
+    if (e1) throw e1;
+    const { data } = await supabase.from("assignatures").select("nom");
+    const sobren = (data || []).map((a) => a.nom).filter((n) => !noms.includes(n));
+    if (sobren.length) await supabase.from("assignatures").delete().in("nom", sobren);
   },
   async desaUsuaris(llista, rol) {
     const { error } = await supabase.from("usuaris").upsert(
