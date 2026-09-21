@@ -1174,8 +1174,8 @@ export default function App() {
       <main className="main">
         {vista === "inici" && <Inici {...{ reserves, rol, usuari }} />}
         {vista === "material" && <Material {...{ material, reserves, crearReserves, rol, usuari, profes, alumnes, assignatures, assigProfs, scan, setScan, notifica }} />}
-        {vista === "espais" && rol !== "Alumne" && <Espais {...{ espais, reserves, crearReserva, rol, usuari, profes, assignatures, assigProfs, protocols, horari }} />}
-        {vista === "fora" && <ForaHorari {...{ espais, material, reserves, crearReserva, rol, usuari, profes, assignatures, assigProfs, protocols }} />}
+        {vista === "espais" && rol !== "Alumne" && <Espais {...{ espais: espais.filter((e) => e.reservable !== false), reserves, crearReserva, rol, usuari, profes, assignatures, assigProfs, protocols, horari }} />}
+        {vista === "fora" && <ForaHorari {...{ espais: espais.filter((e) => e.reservable !== false), material, reserves, crearReserva, rol, usuari, profes, assignatures, assigProfs, protocols }} />}
         {vista === "escaneig" && <Escaneig {...{ material, reserves, crearReserves, rol, usuari, profes, alumnes, assignatures, assigProfs, notifica }} />}
         {vista === "sol.licituds" && <Solicituds {...{ pendents, enPrestec, potAprovar, resolReserva, resolMolts, registrarRetorn, rol }} />}
         {vista === "reparacions" && rol !== "Alumne" && <Reparacions {...{ incidencies, setMaterial, notifica }} />}
@@ -1361,6 +1361,7 @@ function Inici({ reserves, rol, usuari }) {
         </div>
         <div className="calcol">
           <h2 className="h2">Reserves d'espais</h2>
+          <p className="nota" style={{ margin: "-6px 0 8px" }}>Només reserves fetes pel professorat i l'alumnat. No inclou l'horari lectiu.</p>
           <WeekGrid entriesFor={espFor} dates={wk.dates} holidayOf={festiu} compact />
         </div>
       </div>
@@ -2343,12 +2344,16 @@ function EditEspais({ espais, setEspais, notifica }) {
     setNou({ nom: "", equipament: "", foraHorari: false });
     if (!DEMO) db.desaEspais([nouEspai]).catch((e) => notifica("Error desant: " + e.message));
   };
-  const upd = (i, patch) => setEspais(espais.map((e, j) => (j === i ? { ...e, ...patch } : e)));
+  const upd = (i, patch) => {
+    const nou = { ...espais[i], ...patch };
+    setEspais(espais.map((e, j) => (j === i ? nou : e)));
+    if (!DEMO && ("reservable" in patch || "foraHorari" in patch)) db.desaEspais([nou]).catch((err) => notifica("Error desant: " + err.message));
+  };
   const treu = (i) => { const e0 = espais[i]; setEspais(espais.filter((_, j) => j !== i)); notifica("Espai eliminat."); if (!DEMO) db.esborraEspai(e0.nom).catch((e) => notifica("Error desant: " + e.message)); };
   return (
     <div className="editlist">
       <div className="cat-t">Espais ({espais.length})</div>
-      <p className="nota">Els canvis es reflecteixen directament a la llista de "Reserva d'espais". Marca "Fora d'horari" només per a les aules amb protocol de reserva d'alumnat.</p>
+      <p className="nota">Desmarca "Reservable" per treure un espai de la llista de reserva sense esborrar-lo (conserva el seu horari). Marca "Fora h." només per a les aules amb protocol de reserva d'alumnat.</p>
       <div className="addrow" style={{ marginBottom: 10 }}>
         <input placeholder="Nom de l'espai…" value={nou.nom} onChange={(e) => setNou({ ...nou, nom: e.target.value })} style={{ flex: 1, minWidth: 160 }} />
         <input placeholder="Equipament…" value={nou.equipament} onChange={(e) => setNou({ ...nou, equipament: e.target.value })} style={{ flex: 1.4, minWidth: 180 }} />
@@ -2360,6 +2365,7 @@ function EditEspais({ espais, setEspais, notifica }) {
           <div key={i} className="erow">
             <input className="cell" value={e.nom} onChange={(ev) => upd(i, { nom: ev.target.value })} />
             <input className="cell eq" value={e.equipament} onChange={(ev) => upd(i, { equipament: ev.target.value })} />
+            <label className="check mini" title="Apareix a la llista de reserva d'espais"><input type="checkbox" checked={e.reservable !== false} onChange={(ev) => upd(i, { reservable: ev.target.checked })} /> Reservable</label>
             <label className="check mini" title="Reservable fora d'horari"><input type="checkbox" checked={!!e.foraHorari} onChange={(ev) => upd(i, { foraHorari: ev.target.checked })} /> Fora h.</label>
             <button className="x" onClick={() => treu(i)}>✕</button>
           </div>
