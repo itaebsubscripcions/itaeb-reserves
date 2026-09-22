@@ -983,6 +983,11 @@ function mondayOf(iso) { const d = new Date(iso + "T00:00:00"); const off = (d.g
 function addDaysIso(iso, n) { const d = new Date(iso + "T00:00:00"); d.setDate(d.getDate() + n); return isoOf(d); }
 const clampSetmana = (iso) => { const m = mondayOf(iso), lo = mondayOf(CURS.ini), hi = mondayOf(CURS.fi); return m < lo ? lo : m > hi ? hi : m; };
 const INICI_SETMANA = clampSetmana(avui());
+function setmanesFinsFiCurs(dataIni) {
+  const out = []; if (!dataIni) return out;
+  for (let d = dataIni; d <= CURS.fi; d = addDaysIso(d, 7)) if (!festiu(d)) out.push(d);
+  return out;
+}
 function festiu(iso) {
   if (iso < CURS.ini || iso > CURS.fi) return { label: "Fora de curs", tipus: "fora" };
   for (const v of VACANCES) if (iso >= v.ini && iso <= v.fi) return { label: v.label, tipus: "vac" };
@@ -1119,6 +1124,7 @@ export default function App() {
     if (!DEMO) { try { await db.canviaEstat([id], "anul·lada"); } catch (err) { notifica("Error desant: " + err.message); refresca(); } }
   };
   const crearReserva = async (nova) => {
+    if (nova.periodica) return crearReservaPeriodica(nova);
     let estat = "pendent";
     if (rol === "Administrador") estat = "confirmada";
     else if (rol === "Professor" && !(nova.tipus === "espai" && nova.foraHorari)) estat = "confirmada";
@@ -1131,6 +1137,24 @@ export default function App() {
       try { const [creada] = await db.creaReserves([r]); setReserves((rs) => rs.map((x) => (x.id === r.id ? creada : x))); }
       catch (err) { notifica("Error desant: " + err.message); refresca(); }
     }
+  };
+  const crearReservaPeriodica = async (nova) => {
+    let estat = "pendent";
+    if (rol === "Administrador") estat = "confirmada";
+    else if (rol === "Professor" && !nova.foraHorari) estat = "confirmada";
+    else if (rol === "Consergeria") estat = "confirmada";
+    const ocupada = (d) => reserves.some((r) => r.tipus === "espai" && r.ref === nova.ref && r.data === d && esActiva(r) && solapa(r.ini, r.fi, nova.ini, nova.fi));
+    const dates = setmanesFinsFiCurs(nova.data);
+    const lliures = dates.filter((d) => !ocupada(d));
+    const saltades = dates.length - lliures.length;
+    if (!lliures.length) return notifica("Totes les setmanes d'aquesta franja ja estan ocupades.");
+    const lot = DEMO ? "L" + nextId() : (crypto.randomUUID ? crypto.randomUUID() : "L" + nextId());
+    const { periodica, ...base } = nova;
+    const noves = lliures.map((d) => ({ ...base, data: d, refNom: nova.ref + " (setmanal)", lot, id: nextId(), sol: usuari, solEmail: email, rol, estat }));
+    setReserves((rs) => [...noves, ...rs]);
+    setVista("espais");
+    notifica(`${noves.length} reserves setmanals ${estat === "confirmada" ? "confirmades" : "enviades a validar"}${saltades ? ` (${saltades} setmanes ja ocupades, saltades)` : ""}.`);
+    if (!DEMO) { try { await db.creaReserves(noves); refresca(); } catch (err) { notifica("Error desant: " + err.message); refresca(); } }
   };
   const crearReserves = async (llista, comuns, origen) => {
     const estat = rol === "Alumne" ? "pendent" : "confirmada";
@@ -1154,9 +1178,13 @@ export default function App() {
         <div className="brand"><Cub /><div><div className="brand-t">ITAEB · Reserves</div><div className="brand-s">Material i espais</div></div></div>
         <div className="whoami">
           <span className="who-name">{usuari}</span>
-          <select value={rol} onChange={(e) => { const nr = e.target.value; setRol(nr); setUsuari(nr === "Alumne" ? "Laia Ferrer" : nr === "Consergeria" ? "Consergeria" : nr === "Administrador" ? "Direcció tècnica" : "Mireia Devesa"); if (((nr === "Alumne" || nr === "Professor") && (vista === "admin" || vista === "persones")) || (nr === "Alumne" && (vista === "espais" || vista === "reparacions"))) setVista("inici"); }}>
-            {ROLS.map((r) => <option key={r}>{r}</option>)}
-          </select>
+          {DEMO ? (
+            <select value={rol} onChange={(e) => { const nr = e.target.value; setRol(nr); setUsuari(nr === "Alumne" ? "Laia Ferrer" : nr === "Consergeria" ? "Consergeria" : nr === "Administrador" ? "Direcció tècnica" : "Mireia Devesa"); if (((nr === "Alumne" || nr === "Professor") && (vista === "admin" || vista === "persones")) || (nr === "Alumne" && (vista === "espais" || vista === "reparacions"))) setVista("inici"); }}>
+              {ROLS.map((r) => <option key={r}>{r}</option>)}
+            </select>
+          ) : (
+            <span className="rolpill" title="El teu rol el defineix l'administració">{rol}</span>
+          )}
           {DEMO && <span className="pill demo">Mode demo</span>}
           {carregant && <span className="pill">Carregant…</span>}
           {errorBD && <span className="pill err" title={errorBD}>Error de dades</span>}
@@ -1781,13 +1809,16 @@ function FormEspai({ e, rol, usuari, preset, onClose, onSubmit, profes = PROFES,
           <Camp l="Data"><input type="date" value={data} onChange={(ev) => setData(ev.target.value)} /></Camp>
           <div className="camp2"><Camp l="Inici"><input type="time" value={ini} onChange={(ev) => setIni(ev.target.value)} /></Camp><Camp l="Fi"><input type="time" value={fi} onChange={(ev) => setFi(ev.target.value)} /></Camp></div>
           <label className="check"><input type="checkbox" checked={periodica} onChange={(ev) => setPeriodica(ev.target.checked)} /> Reserva periòdica (mateixa franja cada setmana)</label>
+          {periodica && (() => { const n = setmanesFinsFiCurs(data).length; return (
+            <p className="modal-note" style={{ margin: "0 0 10px" }}>Es reservarà cada <b>{DIES[(new Date(data + "T00:00:00").getDay() + 6) % 7] || "setmana"}</b> fins al final de curs ({dfmt(CURS.fi)}): <b>{n} setmanes</b>, sense festius ni vacances. Les setmanes que ja estiguin ocupades se saltaran.</p>
+          ); })()}
         </>
       )}
       <Camp l="Motiu"><textarea rows="2" value={motiu} onChange={(ev) => setMotiu(ev.target.value)} /></Camp>
       {fora ? <p className="modal-note">Espai <b>fora d'horari</b>: requereix aprovació de consergeria/administració. {proto.nota}</p>
         : (esAlumne ? <p className="modal-note">Com a alumne no pots reservar espais dins d'horari lectiu. Contacta amb el professorat.</p> : <p className="modal-note">El professorat de l'assignatura confirma la reserva automàticament.</p>)}
       <div className="modal-act"><button className="btn ghost" onClick={onClose}>Cancel·la</button>
-        <button className="btn prim" disabled={!fora && esAlumne} onClick={() => onSubmit({ tipus: "espai", ref: e.nom, refNom: e.nom + (periodica ? " (setmanal)" : ""), persones: fora ? persones : undefined, data, torn: ini < "15:00" ? "mati" : "tarda", ini, fi, motiu, assignatura: assig, professors: profs, professor: profs[0] || "", foraHorari: fora })}>{rol === "Professor" && !fora ? "Confirma reserva" : "Envia sol·licitud"}</button>
+        <button className="btn prim" disabled={!fora && esAlumne} onClick={() => onSubmit({ tipus: "espai", ref: e.nom, refNom: e.nom, periodica, persones: fora ? persones : undefined, data, torn: ini < "15:00" ? "mati" : "tarda", ini, fi, motiu, assignatura: assig, professors: profs, professor: profs[0] || "", foraHorari: fora })}>{rol === "Professor" && !fora ? "Confirma reserva" : "Envia sol·licitud"}</button>
       </div>
     </Modal>
   );
@@ -2789,6 +2820,7 @@ const css = `
 .pill { font-size:11px; font-weight:700; padding:3px 9px; border-radius:20px; background:#f2f2f2; color:#777; white-space:nowrap; }
 .pill.demo { background:${BRAND.groc}22; color:#96731a; }
 .pill.err { background:#fdecec; color:${BRAND.vermell}; cursor:help; }
+.rolpill { font-size:12px; font-weight:700; padding:6px 11px; border-radius:8px; background:#f2f2f2; color:#555; }
 .sortir { border:1px solid #e2e2e2; background:#fff; color:#666; border-radius:8px; padding:7px 11px; font-size:12.5px; cursor:pointer; }
 .sortir:hover { border-color:${BRAND.vermell}; color:${BRAND.vermell}; }
 @media (max-width:760px){ .login{grid-template-columns:1fr;} .login-brand{padding:30px 24px; gap:16px;} .login-brand svg{width:130px;height:auto;} }
