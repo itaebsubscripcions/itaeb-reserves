@@ -2490,26 +2490,54 @@ function Estat({ estat, label }) {
   return <span className="estat" style={{ color: map[estat] || BRAND.negre, borderColor: map[estat] || BRAND.negre }}>{label || estat}</span>;
 }
 function AssigSelect({ assignatures, value, onChange }) {
-  // Agrupa "Assignatura · Grup" per grup, per trobar-la de pressa entre 135
-  const grups = useMemo(() => {
-    const g = new Map();
-    assignatures.forEach((a) => {
-      const i = a.lastIndexOf(" · ");
-      const gr = i > 0 ? a.slice(i + 3) : "Altres";
-      if (!g.has(gr)) g.set(gr, []);
-      g.get(gr).push(a);
-    });
-    return [...g.entries()];
-  }, [assignatures]);
+  // Cercador amb suggeriments: escrius i va filtrant entre les 135 assignatures
+  const [q, setQ] = useState("");
+  const [obert, setObert] = useState(false);
+  const [marcat, setMarcat] = useState(0);
+  const parts = (a) => { const i = a.lastIndexOf(" · "); return i > 0 ? [a.slice(0, i), a.slice(i + 3)] : [a, ""]; };
+  const sug = useMemo(() => {
+    const t = senseAccents(q.trim().toLowerCase());
+    const base = t ? assignatures.filter((a) => senseAccents(a.toLowerCase()).includes(t)) : assignatures;
+    // primer les que comencen pel que s'escriu
+    return base.slice().sort((a, b) => {
+      const A = senseAccents(parts(a)[0].toLowerCase()).startsWith(t) ? 0 : 1;
+      const B = senseAccents(parts(b)[0].toLowerCase()).startsWith(t) ? 0 : 1;
+      return A - B;
+    }).slice(0, 12);
+  }, [assignatures, q]);
+  useEffect(() => { setMarcat(0); }, [q]);
+
+  if (value) {
+    const [nom, gr] = parts(value);
+    return (
+      <div className="chips" style={{ marginBottom: 0 }}>
+        <span className="pchip alum">{nom}{gr ? <em>{gr}</em> : null}<button onClick={() => { onChange(""); setQ(""); }} aria-label="Canvia d'assignatura">✕</button></span>
+      </div>
+    );
+  }
+  const tria = (a) => { onChange(a); setQ(""); setObert(false); };
   return (
-    <select value={value} onChange={(e) => onChange(e.target.value)}>
-      <option value="">— Tria l'assignatura —</option>
-      {grups.map(([gr, llista]) => (
-        <optgroup key={gr} label={gr}>
-          {llista.map((a) => { const i = a.lastIndexOf(" · "); return <option key={a} value={a}>{i > 0 ? a.slice(0, i) : a}</option>; })}
-        </optgroup>
-      ))}
-    </select>
+    <div className="pwrap">
+      <input value={q} placeholder="Escriu l'assignatura o el grup…"
+        onChange={(e) => { setQ(e.target.value); setObert(true); }}
+        onFocus={() => setObert(true)} onBlur={() => setTimeout(() => setObert(false), 150)}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown") { e.preventDefault(); setMarcat((m) => Math.min(m + 1, sug.length - 1)); }
+          else if (e.key === "ArrowUp") { e.preventDefault(); setMarcat((m) => Math.max(m - 1, 0)); }
+          else if (e.key === "Enter" && sug[marcat]) { e.preventDefault(); tria(sug[marcat]); }
+        }} />
+      {obert && sug.length > 0 && (
+        <div className="psugg">
+          {sug.map((a, k) => { const [nom, gr] = parts(a); return (
+            <button key={a} className={k === marcat ? "on" : ""} onMouseEnter={() => setMarcat(k)}
+              onMouseDown={(e) => e.preventDefault()} onClick={() => tria(a)}>
+              {nom} <em className="sugmail">{gr}</em>
+            </button>
+          ); })}
+        </div>
+      )}
+      {obert && q.trim() && sug.length === 0 && <div className="psugg"><button disabled>Cap assignatura coincideix</button></div>}
+    </div>
   );
 }
 
@@ -2730,7 +2758,8 @@ const css = `
 .pwrap { position:relative; }
 .psugg { position:absolute; z-index:30; left:0; right:0; top:100%; margin-top:4px; background:#fff; border:1px solid #e2e2e2; border-radius:9px; box-shadow:0 8px 24px rgba(0,0,0,.12); max-height:190px; overflow:auto; }
 .psugg button { display:block; width:100%; text-align:left; border:0; background:none; padding:8px 11px; font-size:13px; cursor:pointer; }
-.psugg button:hover { background:#f4faff; }
+.psugg button:hover, .psugg button.on { background:#f4faff; }
+.psugg button:disabled { color:#aaa; cursor:default; background:none; }
 .sugmail { color:#999; font-style:normal; font-size:11.5px; }
 .pchip.alum em { font-style:normal; color:#888; font-size:11px; margin-left:2px; }
 .rep-row { display:flex; align-items:center; gap:16px; border:1px solid #eee; border-left:4px solid ${BRAND.negre}; border-radius:10px; padding:12px 14px; flex-wrap:wrap; }
