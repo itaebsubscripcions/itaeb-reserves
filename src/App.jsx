@@ -966,6 +966,22 @@ function nextDateForDay(diaIdx) {
 }
 const solapa = (aI, aF, bI, bF) => aI < bF && aF > bI;
 const esActiva = (r) => ["pendent", "confirmada", "prestec"].includes(r.estat);
+const finDe = (r) => r.dataFi || r.data;
+// Dues reserves xoquen si els dies se solapen i, quan totes dues són d'un sol dia,
+// també ho fan les hores. Una reserva de diversos dies ocupa el material tot el període.
+function xoca(r, ini, fi, hIni, hFi) {
+  if (finDe(r) < ini || r.data > fi) return false;
+  const multi = finDe(r) > r.data || fi > ini;
+  return multi || solapa(r.ini, r.fi, hIni, hFi);
+}
+// Unitats ocupades de cada material dins d'un període
+function ocupacioPeriode(reserves, ini, fi, hIni, hFi) {
+  const idx = new Map();
+  for (const r of reserves)
+    if (r.tipus === "material" && esActiva(r) && xoca(r, ini, fi, hIni, hFi))
+      idx.set(r.ref, (idx.get(r.ref) || 0) + (r.quantitat || 1));
+  return idx;
+}
 
 const CURS = { ini: "2026-09-08", fi: "2027-06-21" };
 const VACANCES = [
@@ -1340,9 +1356,9 @@ function Inici({ reserves, rol, usuari }) {
     const mat = wk.dates.map(() => []); const esp = wk.dates.map(() => []);
     for (const r of reserves) {
       if (!esActiva(r)) continue;
-      const di = wk.dates.indexOf(r.data);
-      if (di < 0) continue;
-      (r.tipus === "material" ? mat : esp)[di].push(r);
+      wk.dates.forEach((d, di) => {
+        if (d >= r.data && d <= (r.dataFi || r.data)) (r.tipus === "material" ? mat : esp)[di].push(r);
+      });
     }
     return { mat, esp };
   }, [reserves, wk.dates]);
@@ -1449,20 +1465,16 @@ const LlistaMaterial = memo(function LlistaMaterial({ material, ocupacio, onAdd,
 });
 
 function Material({ material, reserves, crearReserves, rol, usuari, profes, alumnes, assignatures, assigProfs = {}, scan, setScan, notifica }) {
-  const ocupacio = useMemo(() => {
-    const idx = new Map();
-    for (const r of reserves) if (r.tipus === "material" && esActiva(r)) idx.set(r.ref, (idx.get(r.ref) || 0) + (r.quantitat || 1));
-    return idx;
-  }, [reserves]);
+  const [data, setData] = useState(avui());
+  const [dataFi, setDataFi] = useState(avui());
+  const [ini, setIni] = useState("09:00");
+  const [fi, setFi] = useState("10:50");
+  const ocupacio = useMemo(() => ocupacioPeriode(reserves, data, dataFi, ini, fi), [reserves, data, dataFi, ini, fi]);
   const cats = useMemo(() => [...new Set(material.map((m) => m.cat))], [material]);
   const lliuresDe = useCallback((m) => Math.max(0, m.unitats - (ocupacio.get(m.codi) || 0)), [ocupacio]);
   const [cerca, setCerca] = useState("");
   const [catSel, setCatSel] = useState("*");
   const [cart, setCart] = useState([]);
-  const [data, setData] = useState(avui());
-  const [torn, setTorn] = useState("mati");
-  const [ini, setIni] = useState("09:00");
-  const [fi, setFi] = useState("10:50");
   const [assig, setAssig] = useState("");
   const [profs, setProfs] = useState([]);
   const [profsRec, setProfsRec] = useState([]);
@@ -1476,13 +1488,28 @@ function Material({ material, reserves, crearReserves, rol, usuari, profes, alum
     setCart((C) => { const i = C.findIndex((x) => x.codi === m.codi); if (i >= 0) { const c = [...C]; c[i] = { ...c[i], q: Math.min(max, c[i].q + 1) }; return c; } return [...C, { codi: m.codi, nom: m.nom, maleta: !!m.maleta, q: 1, max }]; });
     notifica(`Afegit a la cistella: ${m.codi}`);
   }, [ocupacio, notifica]);
+  // Si es canvia el període, es recalculen els màxims de la cistella
+  useEffect(() => {
+    setCart((C) => {
+      if (!C.length) return C;
+      let avis = false;
+      const nou = C.map((x) => {
+        const m = material.find((y) => y.codi === x.codi);
+        const max = m ? Math.max(0, m.unitats - (ocupacio.get(x.codi) || 0)) : 0;
+        if (x.q > max) avis = true;
+        return { ...x, max, q: Math.min(x.q, Math.max(1, max)) };
+      }).filter((x) => x.max > 0);
+      if (nou.length < C.length || avis) notifica("S'han ajustat les quantitats a la disponibilitat del nou període.");
+      return nou;
+    });
+  }, [ocupacio]);
   const setQ = (codi, q) => setCart((C) => C.map((x) => (x.codi === codi ? { ...x, q: Math.max(1, Math.min(x.max, q)) } : x)));
   const treu = (codi) => setCart((C) => C.filter((x) => x.codi !== codi));
   const total = cart.reduce((a, x) => a + x.q, 0);
   const enviar = () => {
     if (!cart.length) return notifica("La cistella és buida.");
     if (esAlumne && !profs.length) return notifica("Indica com a mínim un professor/a.");
-    crearReserves(cart, { data, torn, ini, fi, assignatura: assig, professors: profs, professor: profs[0] || "", profsRecollida: profsRec, responsable: respAlumne || undefined, motiu });
+    crearReserves(cart, { data, dataFi, torn: ini < "15:00" ? "mati" : "tarda", ini, fi, assignatura: assig, professors: profs, professor: profs[0] || "", profsRecollida: profsRec, responsable: respAlumne || undefined, motiu });
     setCart([]); setMotiu(""); setRespAlumne(null);
   };
   const ferScan = () => {
@@ -1500,6 +1527,16 @@ function Material({ material, reserves, crearReserves, rol, usuari, profes, alum
           <div className="scan"><span className="scan-ic">▣</span>
             <input placeholder="CODI o codi de barres…" value={scan} onChange={(e) => setScan(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ferScan()} />
             <button onClick={ferScan}>Afegeix</button></div>
+        </div>
+        <div className="periode">
+          <div className="per-t">Període de la reserva <span>la disponibilitat que veus és la d'aquestes dates</span></div>
+          <div className="per-camps">
+            <label>Del <input type="date" value={data} onChange={(e) => { const v = e.target.value; setData(v); if (v > dataFi) setDataFi(v); }} /></label>
+            <label>al <input type="date" value={dataFi} min={data} onChange={(e) => setDataFi(e.target.value)} /></label>
+            <label>de <input type="time" value={ini} onChange={(e) => setIni(e.target.value)} /></label>
+            <label>a <input type="time" value={fi} onChange={(e) => setFi(e.target.value)} /></label>
+            {dataFi > data && <span className="per-dies">{Math.round((new Date(dataFi) - new Date(data)) / 86400000) + 1} dies</span>}
+          </div>
         </div>
         <div className="filtres">
           <input className="cercabox" placeholder="Cerca per nom, codi o marca…" value={cerca} onChange={(e) => setCerca(e.target.value)} />
@@ -1528,9 +1565,7 @@ function Material({ material, reserves, crearReserves, rol, usuari, profes, alum
             <ProfPicker profes={profes} sel={profs} setSel={setProfs} label="Professor/a Entrega" />
             <ProfPicker profes={profes} sel={profsRec} setSel={setProfsRec} label="Professor/a Recollida" />
             {!esAlumne && <AlumnePicker alumnes={alumnes} sel={respAlumne} setSel={setRespAlumne} label="Alumne/a responsable de la reserva" />}
-            <Camp l="Data"><input type="date" value={data} onChange={(e) => setData(e.target.value)} /></Camp>
-            <Camp l="Torn"><select value={torn} onChange={(e) => setTorn(e.target.value)}>{Object.entries(TORNS).map(([k, v]) => <option key={k} value={k}>{v.nom} ({v.rang})</option>)}</select></Camp>
-            <div className="camp2"><Camp l="Inici"><input type="time" value={ini} onChange={(e) => setIni(e.target.value)} /></Camp><Camp l="Fi"><input type="time" value={fi} onChange={(e) => setFi(e.target.value)} /></Camp></div>
+            <p className="nota" style={{ margin: "0 0 10px" }}>{data === dataFi ? `Dia ${dfmt(data)}` : `Del ${dfmt(data)} al ${dfmt(dataFi)}`} · {ini}–{fi}</p>
             <Camp l="Motiu"><textarea rows="2" value={motiu} onChange={(e) => setMotiu(e.target.value)} /></Camp>
             {esAlumne ? <p className="modal-note" style={{ margin: "0 0 10px" }}>Quedarà <b>pendent</b> d'aprovació de {profs.length ? profs.join(", ") : "el professorat indicat"}.</p> : null}
             <button className="btn prim" style={{ width: "100%" }} onClick={enviar}>{esAlumne ? "Envia sol·licitud" : "Confirma reserva"}</button>
@@ -1544,6 +1579,7 @@ function Material({ material, reserves, crearReserves, rol, usuari, profes, alum
 function FormMaterial({ m, rol, usuari, onClose, onSubmit, profes = PROFES, assignatures = ASSIGNATURES, assigProfs = {} }) {
   const [q, setQ] = useState(1);
   const [data, setData] = useState(avui());
+  const [dataFi, setDataFi] = useState(avui());
   const [torn, setTorn] = useState("mati");
   const [ini, setIni] = useState("09:00");
   const [fi, setFi] = useState("10:50");
@@ -1559,13 +1595,12 @@ function FormMaterial({ m, rol, usuari, onClose, onSubmit, profes = PROFES, assi
       <Camp l="Assignatura"><AssigSelect assignatures={assignatures} value={assig} onChange={(v) => { setAssig(v); const p = (assigProfs[v] || []).slice(0, 3); setProfs(p); setProfsRec(p); }} /></Camp>
       <ProfPicker profes={profes} sel={profs} setSel={setProfs} label="Professor/a Entrega" />
       <ProfPicker profes={profes} sel={profsRec} setSel={setProfsRec} label="Professor/a Recollida" />
-      <Camp l="Data"><input type="date" value={data} onChange={(e) => setData(e.target.value)} /></Camp>
-      <Camp l="Torn"><select value={torn} onChange={(e) => setTorn(e.target.value)}>{Object.entries(TORNS).map(([k, v]) => <option key={k} value={k}>{v.nom} ({v.rang})</option>)}</select></Camp>
+      <div className="camp2"><Camp l="Del dia"><input type="date" value={data} onChange={(e) => { const v = e.target.value; setData(v); if (v > dataFi) setDataFi(v); }} /></Camp><Camp l="Fins al dia"><input type="date" value={dataFi} min={data} onChange={(e) => setDataFi(e.target.value)} /></Camp></div>
       <div className="camp2"><Camp l="Inici"><input type="time" value={ini} onChange={(e) => setIni(e.target.value)} /></Camp><Camp l="Fi"><input type="time" value={fi} onChange={(e) => setFi(e.target.value)} /></Camp></div>
       <Camp l="Motiu"><textarea rows="2" value={motiu} placeholder={m.maleta ? "Projecte personal o lectiu…" : "Ús a l'aula…"} onChange={(e) => setMotiu(e.target.value)} /></Camp>
       {esAlumne ? <p className="modal-note">La petició quedarà <b>pendent</b> d'aprovació de {profs.length ? profs.join(", ") : "el professorat indicat"}.</p> : <p className="modal-note">Com a {rol.toLowerCase()}, la reserva es <b>confirma automàticament</b>.</p>}
       <div className="modal-act"><button className="btn ghost" onClick={onClose}>Cancel·la</button>
-        <button className="btn prim" onClick={() => onSubmit({ tipus: "material", ref: m.codi, refNom: m.nom, quantitat: q, data, torn, ini, fi, motiu, assignatura: assig, professors: profs, professor: profs[0] || "", profsRecollida: profsRec, foraHorari: !!m.maleta })}>{esAlumne ? "Envia sol·licitud" : "Confirma reserva"}</button>
+        <button className="btn prim" onClick={() => onSubmit({ tipus: "material", ref: m.codi, refNom: m.nom, quantitat: q, data, dataFi, torn: ini < "15:00" ? "mati" : "tarda", ini, fi, motiu, assignatura: assig, professors: profs, professor: profs[0] || "", profsRecollida: profsRec, foraHorari: !!m.maleta })}>{esAlumne ? "Envia sol·licitud" : "Confirma reserva"}</button>
       </div>
     </Modal>
   );
@@ -1579,7 +1614,7 @@ function Escaneig({ material, reserves, crearReserves, rol, usuari, profes, alum
   const [manual, setManual] = useState("");
   const [llista, setLlista] = useState([]);
   const [data, setData] = useState(avui());
-  const [torn, setTorn] = useState("mati");
+  const [dataFi, setDataFi] = useState(avui());
   const [ini, setIni] = useState("09:00");
   const [fi, setFi] = useState("10:50");
   const [assig, setAssig] = useState("");
@@ -1588,11 +1623,7 @@ function Escaneig({ material, reserves, crearReserves, rol, usuari, profes, alum
   const [respAlumne, setRespAlumne] = useState(null);
   const [motiu, setMotiu] = useState("");
   const esAlumne = rol === "Alumne";
-  const ocupacio = useMemo(() => {
-    const idx = new Map();
-    for (const r of reserves) if (r.tipus === "material" && esActiva(r)) idx.set(r.ref, (idx.get(r.ref) || 0) + (r.quantitat || 1));
-    return idx;
-  }, [reserves]);
+  const ocupacio = useMemo(() => ocupacioPeriode(reserves, data, dataFi, ini, fi), [reserves, data, dataFi, ini, fi]);
   const lliuresDe = (m) => Math.max(0, m.unitats - (ocupacio.get(m.codi) || 0));
 
   const afegir = (m) => {
@@ -1612,7 +1643,7 @@ function Escaneig({ material, reserves, crearReserves, rol, usuari, profes, alum
   const enviar = () => {
     if (!llista.length) return notifica("La llista és buida.");
     if (esAlumne && !profs.length) return notifica("Indica com a mínim un professor/a.");
-    crearReserves(llista, { data, torn, ini, fi, assignatura: assig, professors: profs, professor: profs[0] || "", profsRecollida: profsRec, responsable: respAlumne || undefined, motiu }, "escaneig");
+    crearReserves(llista, { data, dataFi, torn: ini < "15:00" ? "mati" : "tarda", ini, fi, assignatura: assig, professors: profs, professor: profs[0] || "", profsRecollida: profsRec, responsable: respAlumne || undefined, motiu }, "escaneig");
     setLlista([]); setMotiu(""); setRespAlumne(null);
   };
 
@@ -1698,8 +1729,7 @@ function Escaneig({ material, reserves, crearReserves, rol, usuari, profes, alum
               <ProfPicker profes={profes} sel={profs} setSel={setProfs} label="Professor/a Entrega" />
               <ProfPicker profes={profes} sel={profsRec} setSel={setProfsRec} label="Professor/a Recollida" />
               {!esAlumne && <AlumnePicker alumnes={alumnes} sel={respAlumne} setSel={setRespAlumne} label="Alumne/a responsable de la reserva" />}
-              <Camp l="Data"><input type="date" value={data} onChange={(e) => setData(e.target.value)} /></Camp>
-              <Camp l="Torn"><select value={torn} onChange={(e) => setTorn(e.target.value)}>{Object.entries(TORNS).map(([k, v]) => <option key={k} value={k}>{v.nom} ({v.rang})</option>)}</select></Camp>
+              <div className="camp2"><Camp l="Del dia"><input type="date" value={data} onChange={(e) => { const v = e.target.value; setData(v); if (v > dataFi) setDataFi(v); }} /></Camp><Camp l="Fins al dia"><input type="date" value={dataFi} min={data} onChange={(e) => setDataFi(e.target.value)} /></Camp></div>
               <div className="camp2"><Camp l="Inici"><input type="time" value={ini} onChange={(e) => setIni(e.target.value)} /></Camp><Camp l="Fi"><input type="time" value={fi} onChange={(e) => setFi(e.target.value)} /></Camp></div>
               <Camp l="Motiu"><textarea rows="2" value={motiu} onChange={(e) => setMotiu(e.target.value)} /></Camp>
               <button className="btn prim" style={{ width: "100%" }} onClick={enviar}>{esAlumne ? "Envia a validar" : "Confirma la llista (convalida)"}</button>
@@ -1828,11 +1858,8 @@ function FormEspai({ e, rol, usuari, preset, onClose, onSubmit, profes = PROFES,
 function ForaHorari({ espais, material, reserves, crearReserva, rol, usuari, profes, assignatures, assigProfs = {}, protocols = PROTOCOLS }) {
   const aules = useMemo(() => espais.filter((e) => e.foraHorari), [espais]);
   const maletes = useMemo(() => material.filter((m) => m.maleta), [material]);
-  const ocupacioFora = useMemo(() => {
-    const idx = new Map();
-    for (const r of reserves) if (esActiva(r)) idx.set(r.ref, (idx.get(r.ref) || 0) + (r.quantitat || 1));
-    return idx;
-  }, [reserves]);
+  // Disponibilitat d'avui (les maletes es reserven dia a dia)
+  const ocupacioFora = useMemo(() => ocupacioPeriode(reserves, avui(), avui(), "00:00", "23:59"), [reserves]);
   const [sel, setSel] = useState(null);
   const [selM, setSelM] = useState(null);
   return (
@@ -2049,7 +2076,7 @@ function Historial({ reserves, onEdit }) {
       <p className="nota">Clica una reserva per editar-la o anul·lar-la. {reserves.length} registres.</p>
       <table className="tbl"><thead><tr><th>Tipus</th><th>Referència</th><th>Assignatura</th><th>Sol·licitant</th><th>Data</th><th>Franja</th><th>Estat</th></tr></thead>
         <tbody>{mostra.map((r) => (
-          <tr key={r.id} className="trclic" onClick={() => onEdit && onEdit(r)}><td>{r.tipus === "material" ? "Material" : "Espai"}{r.foraHorari ? " · fora" : ""}</td><td>{r.refNom}{r.quantitat ? ` ×${r.quantitat}` : ""}</td><td>{r.assignatura || "—"}</td><td>{r.sol}</td><td>{r.data}</td><td>{r.ini}–{r.fi}</td><td><Estat estat={estatVis(r.estat)} label={r.estat} /></td></tr>
+          <tr key={r.id} className="trclic" onClick={() => onEdit && onEdit(r)}><td>{r.tipus === "material" ? "Material" : "Espai"}{r.foraHorari ? " · fora" : ""}</td><td>{r.refNom}{r.quantitat ? ` ×${r.quantitat}` : ""}</td><td>{r.assignatura || "—"}</td><td>{r.sol}</td><td>{r.data}{(r.dataFi && r.dataFi !== r.data) ? ` → ${r.dataFi}` : ""}</td><td>{r.ini}–{r.fi}</td><td><Estat estat={estatVis(r.estat)} label={r.estat} /></td></tr>
         ))}</tbody></table>
       {reserves.length > limit && <button className="btn ghost" style={{ width: "100%", marginTop: 12 }} onClick={() => setLimit((l) => l + 100)}>Mostra'n més ({reserves.length - limit} restants)</button>}
     </div>
@@ -2058,6 +2085,7 @@ function Historial({ reserves, onEdit }) {
 
 function EditReserva({ r, onClose, onSave, onAnular }) {
   const [data, setData] = useState(r.data);
+  const [dataFi, setDataFi] = useState(r.dataFi || r.data);
   const [ini, setIni] = useState(r.ini);
   const [fi, setFi] = useState(r.fi);
   const [motiu, setMotiu] = useState(r.motiu || "");
@@ -2066,7 +2094,7 @@ function EditReserva({ r, onClose, onSave, onAnular }) {
   return (
     <Modal onClose={onClose} titol={`Editar reserva · ${r.refNom}`}>
       <p className="modal-sub">{r.tipus === "material" ? "Material" : "Espai"}{r.quantitat ? ` ×${r.quantitat}` : ""} · {r.sol} · <Estat estat={estatVis(r.estat)} label={r.estat} /></p>
-      <Camp l="Data"><input type="date" value={data} disabled={anul} onChange={(e) => setData(e.target.value)} /></Camp>
+      <div className="camp2"><Camp l="Del dia"><input type="date" value={data} disabled={anul} onChange={(e) => { const v = e.target.value; setData(v); if (v > dataFi) setDataFi(v); }} /></Camp><Camp l="Fins al dia"><input type="date" value={dataFi} min={data} disabled={anul} onChange={(e) => setDataFi(e.target.value)} /></Camp></div>
       <div className="camp2"><Camp l="Inici"><input type="time" value={ini} disabled={anul} onChange={(e) => setIni(e.target.value)} /></Camp><Camp l="Fi"><input type="time" value={fi} disabled={anul} onChange={(e) => setFi(e.target.value)} /></Camp></div>
       <Camp l="Motiu"><textarea rows="2" value={motiu} disabled={anul} onChange={(e) => setMotiu(e.target.value)} /></Camp>
       {confirma && <p className="modal-note" style={{ background: "#fdecec" }}>Segur que vols anul·lar aquesta reserva? Alliberarà el recurs i es notificarà el sol·licitant.</p>}
@@ -2078,7 +2106,7 @@ function EditReserva({ r, onClose, onSave, onAnular }) {
           : <span className="nota" style={{ margin: 0 }}>Aquesta reserva està anul·lada.</span>}
         <div style={{ display: "flex", gap: 10 }}>
           <button className="btn ghost" onClick={onClose}>Tanca</button>
-          {!anul && <button className="btn prim" onClick={() => onSave({ data, ini, fi, motiu })}>Desa canvis</button>}
+          {!anul && <button className="btn prim" onClick={() => onSave({ data, dataFi, ini, fi, motiu })}>Desa canvis</button>}
         </div>
       </div>
     </Modal>
@@ -2452,7 +2480,7 @@ function FilaReserva({ r, inline }) {
   return (
     <div className={"fila" + (inline ? " inline" : "")}>
       <span className="fila-dot" style={{ background: r.tipus === "material" ? BRAND.blau : BRAND.groc }} />
-      <div className="fila-main"><div className="fila-nom">{r.refNom}{r.quantitat ? ` ×${r.quantitat}` : ""}</div><div className="fila-meta">{r.sol} · {r.data} · {r.ini}–{r.fi}{r.assignatura ? ` · ${r.assignatura}` : ""}{r.motiu ? ` · ${r.motiu}` : ""}</div></div>
+      <div className="fila-main"><div className="fila-nom">{r.refNom}{r.quantitat ? ` ×${r.quantitat}` : ""}</div><div className="fila-meta">{r.sol} · {r.data}{(r.dataFi && r.dataFi !== r.data) ? ` → ${r.dataFi}` : ""} · {r.ini}–{r.fi}{r.assignatura ? ` · ${r.assignatura}` : ""}{r.motiu ? ` · ${r.motiu}` : ""}</div></div>
       {!inline && <Estat estat={estatVis(r.estat)} label={r.estat} />}
     </div>
   );
@@ -2757,6 +2785,13 @@ const css = `
 .cart::-webkit-scrollbar-thumb { background:#dcdcdc; border-radius:8px; }
 .cart-h { position:sticky; top:0; background:#fff; padding-bottom:8px; z-index:2; }
 .cart-h { font-weight:800; font-size:14px; margin-bottom:10px; }
+.periode { border:1px solid ${BRAND.blau}44; background:${BRAND.blau}0a; border-radius:11px; padding:11px 14px; margin:12px 0 4px; }
+.per-t { font-size:12.5px; font-weight:700; margin-bottom:8px; }
+.per-t span { font-weight:400; color:#888; }
+.per-camps { display:flex; gap:14px; align-items:center; flex-wrap:wrap; font-size:13px; color:#555; }
+.per-camps label { display:flex; align-items:center; gap:6px; }
+.per-camps input { padding:7px 9px; border:1px solid #ddd; border-radius:8px; font-size:13px; background:#fff; }
+.per-dies { background:${BRAND.blau}; color:#fff; font-size:11px; font-weight:700; padding:3px 9px; border-radius:20px; }
 .filtres { display:flex; gap:8px; margin:10px 0 4px; flex-wrap:wrap; }
 .cercabox { flex:1; min-width:180px; padding:9px 11px; border:1px solid #ddd; border-radius:9px; font-size:13px; }
 .filtres select { padding:9px 10px; border:1px solid #ddd; border-radius:9px; font-size:13px; background:#fff; }

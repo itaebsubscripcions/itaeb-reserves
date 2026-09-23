@@ -54,7 +54,7 @@ const resDeDB = (r) => ({
   rol: ROL_APP[r.rol_sol] || "Alumne", professors: r.professors || [],
   professor: (r.professors || [])[0] || "", profsRecollida: r.profs_recollida || [],
   responsable: r.responsable_email ? { nom: r.responsable_nom || r.responsable_email, email: r.responsable_email } : undefined,
-  assignatura: r.assignatura || "", data: r.data, ini: (r.hora_ini || "").slice(0, 5), fi: (r.hora_fi || "").slice(0, 5),
+  assignatura: r.assignatura || "", data: r.data, dataFi: r.data_fi || r.data, ini: (r.hora_ini || "").slice(0, 5), fi: (r.hora_fi || "").slice(0, 5),
   persones: r.persones || undefined, motiu: r.motiu || "", foraHorari: !!r.fora_horari,
   estat: r.estat, motiuIncidencia: r.motiu_incidencia || "", retornat: r.retornat || undefined,
   origen: r.origen || undefined,
@@ -65,7 +65,7 @@ const resADB = (r) => ({
   professors: r.professors || [], profs_recollida: r.profsRecollida || [],
   responsable_email: r.responsable ? r.responsable.email : null,
   responsable_nom: r.responsable ? r.responsable.nom : null,
-  assignatura: r.assignatura || null, data: r.data, hora_ini: r.ini, hora_fi: r.fi,
+  assignatura: r.assignatura || null, data: r.data, data_fi: r.dataFi || r.data, hora_ini: r.ini, hora_fi: r.fi,
   persones: r.persones || null, motiu: r.motiu || null, fora_horari: !!r.foraHorari,
   estat: r.estat, origen: r.origen || null,
 });
@@ -125,6 +125,7 @@ export const db = {
   async actualitzaReserva(id, patch) {
     const p = {};
     if (patch.data) p.data = patch.data;
+    if (patch.dataFi) p.data_fi = patch.dataFi;
     if (patch.ini) p.hora_ini = patch.ini;
     if (patch.fi) p.hora_fi = patch.fi;
     if (patch.motiu !== undefined) p.motiu = patch.motiu;
