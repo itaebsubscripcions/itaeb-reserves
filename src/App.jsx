@@ -1216,9 +1216,9 @@ export default function App() {
         ))}
       </nav>
       <main className="main">
-        {vista === "inici" && <Inici {...{ reserves, rol, usuari }} />}
+        {vista === "inici" && <Inici {...{ reserves, rol, usuari }} onEditarReserva={setEditRes} />}
         {vista === "material" && <Material {...{ material, reserves, crearReserves, rol, usuari, profes, alumnes, assignatures, assigProfs, scan, setScan, notifica }} />}
-        {vista === "espais" && rol !== "Alumne" && <Espais {...{ espais: espais.filter((e) => e.reservable !== false), reserves, crearReserva, rol, usuari, profes, assignatures, assigProfs, protocols, horari }} />}
+        {vista === "espais" && rol !== "Alumne" && <Espais {...{ espais: espais.filter((e) => e.reservable !== false), reserves, crearReserva, rol, usuari, profes, assignatures, assigProfs, protocols, horari }} onEditarReserva={setEditRes} />}
         {vista === "fora" && <ForaHorari {...{ espais: espais.filter((e) => e.reservable !== false), material, reserves, crearReserva, rol, usuari, profes, assignatures, assigProfs, protocols }} />}
         {vista === "escaneig" && <Escaneig {...{ material, reserves, crearReserves, rol, usuari, profes, alumnes, assignatures, assigProfs, notifica }} />}
         {vista === "sol.licituds" && <Solicituds {...{ pendents, enPrestec, potAprovar, resolReserva, resolMolts, registrarRetorn, rol }} />}
@@ -1227,7 +1227,7 @@ export default function App() {
         {vista === "admin" && gestor && <Admin {...{ material, setMaterial, notifica }} />}
         {vista === "persones" && gestor && <Persones {...{ profes, setProfes, alumnes, setAlumnes, assignatures, setAssignatures, espais, setEspais, notifica, rol }} />}
       </main>
-      {editRes && <EditReserva r={editRes} onClose={() => setEditRes(null)} onSave={(patch) => { updateReserva(editRes.id, patch); setEditRes(null); }} onAnular={() => anularReserva(editRes.id)} />}
+      {editRes && <EditReserva r={editRes} espais={espais.filter((e) => e.reservable !== false)} onClose={() => setEditRes(null)} onSave={(patch) => { updateReserva(editRes.id, patch); setEditRes(null); }} onAnular={() => anularReserva(editRes.id)} />}
       {toast && <div className="toast">{toast}</div>}
     </div>
   );
@@ -1302,7 +1302,7 @@ function WeekNav({ wk }) {
 }
 
 /* ---------- Reixa setmanal ---------- */
-function WeekGrid({ entriesFor, hintFor, onCell, clickable, dates, holidayOf, compact }) {
+function WeekGrid({ entriesFor, hintFor, onCell, clickable, dates, holidayOf, compact, onEntrada }) {
   const canClick = (di, f) => !!onCell && (!clickable || clickable(di, f));
   const holi = (di) => (dates && holidayOf ? holidayOf(dates[di]) : null);
   return (
@@ -1332,7 +1332,11 @@ function WeekGrid({ entriesFor, hintFor, onCell, clickable, dates, holidayOf, co
                   const clic = canClick(di, f);
                   return (
                     <td key={d} className={(hint ? "reservable " : "") + (clic ? "clik" : "")} onClick={clic ? () => onCell(di, f) : undefined}>
-                      {es.map((e, i) => <span key={i} className="chip" style={{ borderColor: e.color, color: e.color }}>{e.label}</span>)}
+                      {es.map((e, i) => (e.r && onEntrada
+                        ? <button key={i} className="chip clicable" style={{ borderColor: e.color, color: e.color }}
+                            title="Clica per editar o anul·lar la reserva"
+                            onClick={(ev) => { ev.stopPropagation(); onEntrada(e.r); }}>{e.label}</button>
+                        : <span key={i} className="chip" style={{ borderColor: e.color, color: e.color }}>{e.label}</span>))}
                       {clic && es.length === 0 && <span className="lliure">{hint ? "Reservable +" : "+"}</span>}
                     </td>
                   );
@@ -1346,7 +1350,7 @@ function WeekGrid({ entriesFor, hintFor, onCell, clickable, dates, holidayOf, co
 }
 
 /* ---------------- INICI ---------------- */
-function Inici({ reserves, rol, usuari }) {
+function Inici({ reserves, rol, usuari, onEditarReserva }) {
   // Salutació segons l'hora, amb el nom real de qui ha entrat
   const h = new Date().getHours();
   const salutacio = h < 14 ? "Bon dia" : h < 21 ? "Bona tarda" : "Bona nit";
@@ -1363,9 +1367,9 @@ function Inici({ reserves, rol, usuari }) {
     return { mat, esp };
   }, [reserves, wk.dates]);
   const matFor = (di, f) => perDia.mat[di].filter((r) => solapa(r.ini, r.fi, f.ini, f.fi))
-    .map((r) => ({ label: `${r.refNom}${r.quantitat ? " ×" + r.quantitat : ""}`, color: r.estat === "confirmada" ? BRAND.blau : BRAND.groc }));
+    .map((r) => ({ label: `${r.refNom}${r.quantitat ? " ×" + r.quantitat : ""}`, color: r.estat === "confirmada" ? BRAND.blau : BRAND.groc, r }));
   const espFor = (di, f) => perDia.esp[di].filter((r) => solapa(r.ini, r.fi, f.ini, f.fi))
-    .map((r) => ({ label: `${r.ref} · ${r.sol}`, color: r.estat === "confirmada" ? BRAND.blau : BRAND.groc }));
+    .map((r) => ({ label: `${r.ref} · ${r.sol}`, color: r.estat === "confirmada" ? BRAND.blau : BRAND.groc, r }));
   return (
     <div>
       <div className="hero">
@@ -1377,12 +1381,12 @@ function Inici({ reserves, rol, usuari }) {
       <div className="dualcal">
         <div className="calcol">
           <h2 className="h2">Reserves de material</h2>
-          <WeekGrid entriesFor={matFor} dates={wk.dates} holidayOf={festiu} compact />
+          <WeekGrid entriesFor={matFor} dates={wk.dates} holidayOf={festiu} compact onEntrada={onEditarReserva} />
         </div>
         <div className="calcol">
           <h2 className="h2">Reserves d'espais</h2>
           <p className="nota" style={{ margin: "-6px 0 8px" }}>Només reserves fetes pel professorat i l'alumnat. No inclou l'horari lectiu.</p>
-          <WeekGrid entriesFor={espFor} dates={wk.dates} holidayOf={festiu} compact />
+          <WeekGrid entriesFor={espFor} dates={wk.dates} holidayOf={festiu} compact onEntrada={onEditarReserva} />
         </div>
       </div>
     </div>
@@ -1742,7 +1746,7 @@ function Escaneig({ material, reserves, crearReserves, rol, usuari, profes, alum
 }
 
 /* ---------------- ESPAIS ---------------- */
-function Espais({ espais, reserves, crearReserva, rol, usuari, profes, assignatures, assigProfs = {}, protocols = PROTOCOLS, horari = HORARI_LECTIU }) {
+function Espais({ espais, reserves, crearReserva, rol, usuari, profes, assignatures, assigProfs = {}, protocols = PROTOCOLS, horari = HORARI_LECTIU, onEditarReserva }) {
   const wk = useSetmana();
   const [selNom, setSelNom] = useState(espais.length ? espais[0].nom : "");
   const [obrirForm, setObrirForm] = useState(false);
@@ -1758,7 +1762,7 @@ function Espais({ espais, reserves, crearReserva, rol, usuari, profes, assignatu
   const proto = protocols[sel.nom];
   const entriesFor = (di, f) => [
     ...dadesEspai.lect[di].filter((h) => solapa(h.ini, h.fi, f.ini, f.fi)).map((h) => ({ label: h.label, color: BRAND.negre })),
-    ...dadesEspai.res[di].filter((r) => solapa(r.ini, r.fi, f.ini, f.fi)).map((r) => ({ label: `${r.sol} · ${r.motiu || "reserva"}`, color: r.estat === "confirmada" ? BRAND.blau : BRAND.groc })),
+    ...dadesEspai.res[di].filter((r) => solapa(r.ini, r.fi, f.ini, f.fi)).map((r) => ({ label: `${r.sol} · ${r.motiu || "reserva"}`, color: r.estat === "confirmada" ? BRAND.blau : BRAND.groc, r })),
   ];
   const hintFor = proto ? (di, f) => proto.slots.some((s) => s.dia === DIES[di] && solapa(s.ini, s.fi, f.ini, f.fi)) : null;
   // Una franja amb classe lectiva queda bloquejada: no es pot reservar
@@ -1791,9 +1795,9 @@ function Espais({ espais, reserves, crearReserva, rol, usuari, profes, assignatu
           <span><i style={{ background: BRAND.groc }} /> Pendent</span>
           {proto && <span><i style={{ background: "#fdf0c9", border: "1px solid " + BRAND.groc }} /> Franja reservable</span>}
         </div>
-        <p className="nota" style={{ margin: "0 0 8px" }}>Clica una franja lliure per reservar-hi{proto ? " (només les marcades)" : ""}. Les ocupades per classes no es poden seleccionar.</p>
+        <p className="nota" style={{ margin: "0 0 8px" }}>Clica una franja lliure per reservar-hi{proto ? " (només les marcades)" : ""}. Clica una reserva existent per <b>editar-la o anul·lar-la</b>. Les classes lectives no es poden seleccionar.</p>
         <WeekNav wk={wk} />
-        <WeekGrid entriesFor={entriesFor} hintFor={hintFor} onCell={onCell} clickable={clickable} dates={wk.dates} holidayOf={festiu} />
+        <WeekGrid entriesFor={entriesFor} hintFor={hintFor} onCell={onCell} clickable={clickable} dates={wk.dates} holidayOf={festiu} onEntrada={onEditarReserva} />
         {proto
           ? <p className="nota" style={{ marginTop: 10 }}>Fora d'horari només es pot reservar a les franges marcades. {proto.nota}</p>
           : <p className="nota" style={{ marginTop: 10 }}>Les franges amb classe lectiva apareixen en negre i no es poden reservar.</p>}
@@ -2083,7 +2087,9 @@ function Historial({ reserves, onEdit }) {
   );
 }
 
-function EditReserva({ r, onClose, onSave, onAnular }) {
+function EditReserva({ r, onClose, onSave, onAnular, espais = [] }) {
+  const [ref, setRef] = useState(r.ref);
+  const [quant, setQuant] = useState(r.quantitat || 1);
   const [data, setData] = useState(r.data);
   const [dataFi, setDataFi] = useState(r.dataFi || r.data);
   const [ini, setIni] = useState(r.ini);
@@ -2094,6 +2100,14 @@ function EditReserva({ r, onClose, onSave, onAnular }) {
   return (
     <Modal onClose={onClose} titol={`Editar reserva · ${r.refNom}`}>
       <p className="modal-sub">{r.tipus === "material" ? "Material" : "Espai"}{r.quantitat ? ` ×${r.quantitat}` : ""} · {r.sol} · <Estat estat={estatVis(r.estat)} label={r.estat} /></p>
+      {r.tipus === "espai" && espais.length > 0 && (
+        <Camp l="Espai"><select value={ref} disabled={anul} onChange={(e) => setRef(e.target.value)}>
+          {(espais.some((e) => e.nom === ref) ? espais : [{ nom: ref }, ...espais]).map((e) => <option key={e.nom}>{e.nom}</option>)}
+        </select></Camp>
+      )}
+      {r.tipus === "material" && (
+        <Camp l="Unitats"><input type="number" min="1" value={quant} disabled={anul} onChange={(e) => setQuant(Math.max(1, +e.target.value))} /></Camp>
+      )}
       <div className="camp2"><Camp l="Del dia"><input type="date" value={data} disabled={anul} onChange={(e) => { const v = e.target.value; setData(v); if (v > dataFi) setDataFi(v); }} /></Camp><Camp l="Fins al dia"><input type="date" value={dataFi} min={data} disabled={anul} onChange={(e) => setDataFi(e.target.value)} /></Camp></div>
       <div className="camp2"><Camp l="Inici"><input type="time" value={ini} disabled={anul} onChange={(e) => setIni(e.target.value)} /></Camp><Camp l="Fi"><input type="time" value={fi} disabled={anul} onChange={(e) => setFi(e.target.value)} /></Camp></div>
       <Camp l="Motiu"><textarea rows="2" value={motiu} disabled={anul} onChange={(e) => setMotiu(e.target.value)} /></Camp>
@@ -2106,7 +2120,7 @@ function EditReserva({ r, onClose, onSave, onAnular }) {
           : <span className="nota" style={{ margin: 0 }}>Aquesta reserva està anul·lada.</span>}
         <div style={{ display: "flex", gap: 10 }}>
           <button className="btn ghost" onClick={onClose}>Tanca</button>
-          {!anul && <button className="btn prim" onClick={() => onSave({ data, dataFi, ini, fi, motiu })}>Desa canvis</button>}
+          {!anul && <button className="btn prim" onClick={() => onSave({ data, dataFi, ini, fi, motiu, ...(r.tipus === "espai" ? { ref, refNom: ref } : { quantitat: quant }) })}>Desa canvis</button>}
         </div>
       </div>
     </Modal>
@@ -2694,6 +2708,8 @@ const css = `
 .week td.reservable { background:#fffdf3; }
 .week td.clik { cursor:pointer; }
 .week td.clik:hover { box-shadow:inset 0 0 0 2px ${BRAND.blau}55; background:#eef7fd; }
+.chip.clicable { cursor:pointer; text-align:left; width:100%; font-family:inherit; }
+.chip.clicable:hover { filter:brightness(.92); box-shadow:0 0 0 2px currentColor inset; }
 .chip { display:block; border:1px solid; border-left-width:3px; border-radius:5px; padding:2px 5px; margin-bottom:3px; font-size:10.5px; line-height:1.25; background:#fff; }
 .lliure { font-size:10px; color:#cfcfcf; }
 .week td.reservable .lliure { color:#c9a63a; }

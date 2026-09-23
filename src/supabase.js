@@ -129,6 +129,8 @@ export const db = {
     if (patch.ini) p.hora_ini = patch.ini;
     if (patch.fi) p.hora_fi = patch.fi;
     if (patch.motiu !== undefined) p.motiu = patch.motiu;
+    if (patch.ref !== undefined) { p.ref = patch.ref; p.ref_nom = patch.refNom || patch.ref; }
+    if (patch.quantitat !== undefined) p.quantitat = patch.quantitat;
     const { error } = await supabase.from("reserves").update(p).eq("id", id);
     if (error) throw error;
   },
