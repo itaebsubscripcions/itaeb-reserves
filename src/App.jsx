@@ -876,7 +876,14 @@ TMID18230V	Arranques directes motors trifàsics	Taller		1	Magatzem
 KPSMT440	Multímetre	Taller		1	Magatzem
 MY63	Multímetre	Taller		1	Magatzem
 KPSPA10	Pinça amperimètrica	Taller		1	Magatzem`;
-const MALETES = { "MAL-CAM": "Maleta Càmera Blackmagic Cinema", "MAL-SO": "Maleta So (microfonia)", "MAL-LED": "Maleta Llums (panells LED)" };
+const MALETES = {
+  "MAL-CAM": { nom: "Maleta Càmera Blackmagic Cinema", marca: "Blackmagic", unitats: 3 },
+  "MAL-SO": { nom: "Maleta So (microfonia)", marca: "Varis", unitats: 3 },
+  "MAL-LED": { nom: "Maleta Llums (panells LED)", marca: "Godox", unitats: 3 },
+  "MAL-SONY": { nom: "Maleta Càmera Sony a7s II", marca: "Sony", unitats: 1 },
+  "MAL-DJ": { nom: "Maleta DJ (controladora, auriculars i cablejat)", marca: "Varis", unitats: 1 },
+  "MAL-PROD": { nom: "Maleta Producció Musical (targeta de so, micro, auriculars)", marca: "Varis", unitats: 1 },
+};
 const CODIS_BARRES = { "ALPHA6700I": "8806094758122", "ZOOMH5": "4515260019177", "FLX4-01": "4988001234567" };
 // Incidències d'exemple (a la versió real vindrien de l'historial de devolucions)
 const INCIDENCIES_DEMO = {
@@ -884,7 +891,7 @@ const INCIDENCIES_DEMO = {
   "EOSR100": { estat: "Perdut", incidencia: { tipus: "perdut", data: "2026-08-25", per: "Grup 2n AV", nota: "" } },
 };
 const MATERIAL_SEED = [
-  ...Object.entries(MALETES).map(([codi, nom]) => ({ codi, nom, cat: "Maletes préstec", marca: "Varis", unitats: 3, ubic: "Magatzem AV", estat: "Disponible", maleta: true, codiBarres: "" })),
+  ...Object.entries(MALETES).map(([codi, m]) => ({ codi, nom: m.nom, cat: "Maletes préstec", marca: m.marca, unitats: m.unitats, ubic: "Magatzem AV", estat: "Disponible", maleta: true, codiBarres: "" })),
   ...INVENTARI_TSV.trim().split("\n").map((l) => {
     const [codi, nom, cat, marca, unitats, ubic] = l.split("\t");
     return { codi, nom, cat, marca: marca || "—", unitats: +unitats || 1, ubic: ubic || "Magatzem", estat: "Disponible", codiBarres: CODIS_BARRES[codi] || "", ...(INCIDENCIES_DEMO[codi] || {}) };
@@ -973,6 +980,17 @@ function xoca(r, ini, fi, hIni, hFi) {
   if (finDe(r) < ini || r.data > fi) return false;
   const multi = finDe(r) > r.data || fi > ini;
   return multi || solapa(r.ini, r.fi, hIni, hFi);
+}
+// Comprova dates i hores abans d'enviar-ho a la base de dades.
+// Si la reserva ocupa més d'un dia, l'hora de retorn pot ser anterior a la de
+// recollida (p. ex. maletes: divendres 18:00 → dilluns 09:00). Si és d'un sol
+// dia, l'hora de fi ha de ser posterior a la d'inici.
+function errorDeDates({ data, dataFi, ini, fi }) {
+  if (!data || !ini || !fi) return "Cal indicar la data i les hores.";
+  const fin = dataFi || data;
+  if (fin < data) return "La data de retorn no pot ser anterior a la de recollida.";
+  if (fin === data && fi <= ini) return "En una reserva d'un sol dia, l'hora de fi ha de ser posterior a la d'inici. Si la vols per a més d'un dia, canvia «Fins al dia».";
+  return null;
 }
 // Unitats ocupades de cada material dins d'un període
 function ocupacioPeriode(reserves, ini, fi, hIni, hFi) {
@@ -1130,9 +1148,12 @@ export default function App() {
     if (!DEMO) { try { await db.canviaEstat(ids, e); } catch (err) { notifica("Error desant: " + err.message); refresca(); } }
   };
   const updateReserva = async (id, patch) => {
+    const errDates = errorDeDates(patch);
+    if (errDates) { notifica(errDates); return false; }
     setReserves((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
     notifica("Reserva actualitzada.");
     if (!DEMO) { try { await db.actualitzaReserva(id, patch); } catch (err) { notifica("Error desant: " + err.message); refresca(); } }
+    return true;
   };
   const anularReserva = async (id) => {
     setReserves((rs) => rs.map((r) => (r.id === id ? { ...r, estat: "anul·lada" } : r)));
@@ -1140,6 +1161,8 @@ export default function App() {
     if (!DEMO) { try { await db.canviaEstat([id], "anul·lada"); } catch (err) { notifica("Error desant: " + err.message); refresca(); } }
   };
   const crearReserva = async (nova) => {
+    const errDates = errorDeDates(nova);
+    if (errDates) return notifica(errDates);
     if (nova.periodica) return crearReservaPeriodica(nova);
     let estat = "pendent";
     if (rol === "Administrador") estat = "confirmada";
@@ -1173,6 +1196,8 @@ export default function App() {
     if (!DEMO) { try { await db.creaReserves(noves); refresca(); } catch (err) { notifica("Error desant: " + err.message); refresca(); } }
   };
   const crearReserves = async (llista, comuns, origen) => {
+    const errDates = errorDeDates(comuns);
+    if (errDates) return notifica(errDates);
     const estat = rol === "Alumne" ? "pendent" : "confirmada";
     const lot = DEMO ? "L" + nextId() : (crypto.randomUUID ? crypto.randomUUID() : "L" + nextId());
     const noves = llista.map((it) => ({ tipus: "material", ref: it.codi, refNom: it.nom, quantitat: it.q || 1, ...comuns, foraHorari: !!it.maleta, origen, lot, id: nextId(), sol: usuari, solEmail: email, rol, estat }));
@@ -1227,7 +1252,7 @@ export default function App() {
         {vista === "admin" && gestor && <Admin {...{ material, setMaterial, notifica }} />}
         {vista === "persones" && gestor && <Persones {...{ profes, setProfes, alumnes, setAlumnes, assignatures, setAssignatures, espais, setEspais, notifica, rol }} />}
       </main>
-      {editRes && <EditReserva r={editRes} espais={espais.filter((e) => e.reservable !== false)} onClose={() => setEditRes(null)} onSave={(patch) => { updateReserva(editRes.id, patch); setEditRes(null); }} onAnular={() => anularReserva(editRes.id)} />}
+      {editRes && <EditReserva r={editRes} espais={espais.filter((e) => e.reservable !== false)} onClose={() => setEditRes(null)} onSave={async (patch) => { if (await updateReserva(editRes.id, patch)) setEditRes(null); }} onAnular={() => anularReserva(editRes.id)} />}
       {toast && <div className="toast">{toast}</div>}
     </div>
   );
@@ -1537,8 +1562,8 @@ function Material({ material, reserves, crearReserves, rol, usuari, profes, alum
           <div className="per-camps">
             <label>Del <input type="date" value={data} onChange={(e) => { const v = e.target.value; setData(v); if (v > dataFi) setDataFi(v); }} /></label>
             <label>al <input type="date" value={dataFi} min={data} onChange={(e) => setDataFi(e.target.value)} /></label>
-            <label>de <input type="time" value={ini} onChange={(e) => setIni(e.target.value)} /></label>
-            <label>a <input type="time" value={fi} onChange={(e) => setFi(e.target.value)} /></label>
+            <label>{dataFi > data ? "recollida" : "de"} <input type="time" value={ini} onChange={(e) => setIni(e.target.value)} /></label>
+            <label>{dataFi > data ? "retorn" : "a"} <input type="time" value={fi} onChange={(e) => setFi(e.target.value)} /></label>
             {dataFi > data && <span className="per-dies">{Math.round((new Date(dataFi) - new Date(data)) / 86400000) + 1} dies</span>}
           </div>
         </div>
@@ -1600,7 +1625,13 @@ function FormMaterial({ m, rol, usuari, onClose, onSubmit, profes = PROFES, assi
       <ProfPicker profes={profes} sel={profs} setSel={setProfs} label="Professor/a Entrega" />
       <ProfPicker profes={profes} sel={profsRec} setSel={setProfsRec} label="Professor/a Recollida" />
       <div className="camp2"><Camp l="Del dia"><input type="date" value={data} onChange={(e) => { const v = e.target.value; setData(v); if (v > dataFi) setDataFi(v); }} /></Camp><Camp l="Fins al dia"><input type="date" value={dataFi} min={data} onChange={(e) => setDataFi(e.target.value)} /></Camp></div>
-      <div className="camp2"><Camp l="Inici"><input type="time" value={ini} onChange={(e) => setIni(e.target.value)} /></Camp><Camp l="Fi"><input type="time" value={fi} onChange={(e) => setFi(e.target.value)} /></Camp></div>
+      <div className="camp2"><Camp l={dataFi > data ? "Hora de recollida" : "Inici"}><input type="time" value={ini} onChange={(e) => setIni(e.target.value)} /></Camp><Camp l={dataFi > data ? "Hora de retorn" : "Fi"}><input type="time" value={fi} onChange={(e) => setFi(e.target.value)} /></Camp></div>
+      {dataFi > data
+        ? <p className="nota" style={{ margin: "0 0 10px" }}>Recollida el {dfmt(data)} a les {ini} i retorn el {dfmt(dataFi)} a les {fi} ({Math.round((new Date(dataFi) - new Date(data)) / 86400000) + 1} dies). El material queda ocupat tot el període.</p>
+        : null}
+      {m.maleta && dataFi === data
+        ? <p className="nota" style={{ margin: "0 0 10px" }}>Per a un préstec de cap de setmana, posa «Fins al dia» al dia del retorn: així pots recollir-la divendres a la tarda i tornar-la dilluns al matí.</p>
+        : null}
       <Camp l="Motiu"><textarea rows="2" value={motiu} placeholder={m.maleta ? "Projecte personal o lectiu…" : "Ús a l'aula…"} onChange={(e) => setMotiu(e.target.value)} /></Camp>
       {esAlumne ? <p className="modal-note">La petició quedarà <b>pendent</b> d'aprovació de {profs.length ? profs.join(", ") : "el professorat indicat"}.</p> : <p className="modal-note">Com a {rol.toLowerCase()}, la reserva es <b>confirma automàticament</b>.</p>}
       <div className="modal-act"><button className="btn ghost" onClick={onClose}>Cancel·la</button>
@@ -1734,7 +1765,7 @@ function Escaneig({ material, reserves, crearReserves, rol, usuari, profes, alum
               <ProfPicker profes={profes} sel={profsRec} setSel={setProfsRec} label="Professor/a Recollida" />
               {!esAlumne && <AlumnePicker alumnes={alumnes} sel={respAlumne} setSel={setRespAlumne} label="Alumne/a responsable de la reserva" />}
               <div className="camp2"><Camp l="Del dia"><input type="date" value={data} onChange={(e) => { const v = e.target.value; setData(v); if (v > dataFi) setDataFi(v); }} /></Camp><Camp l="Fins al dia"><input type="date" value={dataFi} min={data} onChange={(e) => setDataFi(e.target.value)} /></Camp></div>
-              <div className="camp2"><Camp l="Inici"><input type="time" value={ini} onChange={(e) => setIni(e.target.value)} /></Camp><Camp l="Fi"><input type="time" value={fi} onChange={(e) => setFi(e.target.value)} /></Camp></div>
+              <div className="camp2"><Camp l={dataFi > data ? "Hora de recollida" : "Inici"}><input type="time" value={ini} onChange={(e) => setIni(e.target.value)} /></Camp><Camp l={dataFi > data ? "Hora de retorn" : "Fi"}><input type="time" value={fi} onChange={(e) => setFi(e.target.value)} /></Camp></div>
               <Camp l="Motiu"><textarea rows="2" value={motiu} onChange={(e) => setMotiu(e.target.value)} /></Camp>
               <button className="btn prim" style={{ width: "100%" }} onClick={enviar}>{esAlumne ? "Envia a validar" : "Confirma la llista (convalida)"}</button>
             </div>
@@ -1885,7 +1916,7 @@ function ForaHorari({ espais, material, reserves, crearReserva, rol, usuari, pro
           );
         })}
       </div>
-      <h2 className="h2" style={{ marginTop: 26 }}>Maletes en préstec (3 de cada)</h2>
+      <h2 className="h2" style={{ marginTop: 26 }}>Maletes en préstec</h2>
       <div className="grid">
         {maletes.map((m) => {
           const lliures = Math.max(0, m.unitats - (ocupacioFora.get(m.codi) || 0));
@@ -2109,7 +2140,7 @@ function EditReserva({ r, onClose, onSave, onAnular, espais = [] }) {
         <Camp l="Unitats"><input type="number" min="1" value={quant} disabled={anul} onChange={(e) => setQuant(Math.max(1, +e.target.value))} /></Camp>
       )}
       <div className="camp2"><Camp l="Del dia"><input type="date" value={data} disabled={anul} onChange={(e) => { const v = e.target.value; setData(v); if (v > dataFi) setDataFi(v); }} /></Camp><Camp l="Fins al dia"><input type="date" value={dataFi} min={data} disabled={anul} onChange={(e) => setDataFi(e.target.value)} /></Camp></div>
-      <div className="camp2"><Camp l="Inici"><input type="time" value={ini} disabled={anul} onChange={(e) => setIni(e.target.value)} /></Camp><Camp l="Fi"><input type="time" value={fi} disabled={anul} onChange={(e) => setFi(e.target.value)} /></Camp></div>
+      <div className="camp2"><Camp l={dataFi > data ? "Hora de recollida" : "Inici"}><input type="time" value={ini} disabled={anul} onChange={(e) => setIni(e.target.value)} /></Camp><Camp l={dataFi > data ? "Hora de retorn" : "Fi"}><input type="time" value={fi} disabled={anul} onChange={(e) => setFi(e.target.value)} /></Camp></div>
       <Camp l="Motiu"><textarea rows="2" value={motiu} disabled={anul} onChange={(e) => setMotiu(e.target.value)} /></Camp>
       {confirma && <p className="modal-note" style={{ background: "#fdecec" }}>Segur que vols anul·lar aquesta reserva? Alliberarà el recurs i es notificarà el sol·licitant.</p>}
       <div className="modal-act" style={{ justifyContent: "space-between" }}>
