@@ -25,6 +25,11 @@ function correuDe(nom) {
 
 const TORNS = { mati: { nom: "Matí", rang: "08:00–14:30" }, tarda: { nom: "Tarda", rang: "15:00–21:30" } };
 const DIES = ["Dilluns", "Dimarts", "Dimecres", "Dijous", "Divendres"];
+// La setmana lectiva és de dilluns a divendres, però les maletes es presten el
+// cap de setmana: les graelles mostren els set dies perquè s'hi vegin.
+const DIES_SETMANA = [...DIES, "Dissabte", "Diumenge"];
+// Abreviatures catalanes: retallar a dues lletres donava "Di" per a tots set
+const ABREV = { Dilluns: "Dl", Dimarts: "Dt", Dimecres: "Dc", Dijous: "Dj", Divendres: "Dv", Dissabte: "Ds", Diumenge: "Dg" };
 
 const FRANGES = [
   { ini: "08:00", fi: "09:00" }, { ini: "09:00", fi: "09:55" }, { ini: "09:55", fi: "10:50" },
@@ -964,7 +969,7 @@ const avui = () => isoOf(new Date());
 function weekDates(baseIso) {
   const d = new Date(baseIso + "T00:00:00"); const off = (d.getDay() + 6) % 7;
   const mon = new Date(d); mon.setDate(d.getDate() - off);
-  return [0, 1, 2, 3, 4].map((i) => { const x = new Date(mon); x.setDate(mon.getDate() + i); return isoOf(x); });
+  return [0, 1, 2, 3, 4, 5, 6].map((i) => { const x = new Date(mon); x.setDate(mon.getDate() + i); return isoOf(x); });
 }
 function nextDateForDay(diaIdx) {
   const t = new Date(avui() + "T00:00:00");
@@ -980,6 +985,32 @@ function xoca(r, ini, fi, hIni, hFi) {
   if (finDe(r) < ini || r.data > fi) return false;
   const multi = finDe(r) > r.data || fi > ini;
   return multi || solapa(r.ini, r.fi, hIni, hFi);
+}
+const diaMes = (iso) => (+iso.slice(8)) + "/" + (+iso.slice(5, 7));
+const esMultidia = (r) => finDe(r) > r.data;
+// Franja horària que ocupa una reserva en un dia concret del seu període.
+// Un préstec de divendres 18:00 a dilluns 09:00 ocupa el divendres des de les
+// 18:00, el cap de setmana sencer, i el dilluns fins a les 09:00.
+function horesDelDia(r, dia) {
+  const fin = finDe(r);
+  if (dia === r.data && dia === fin) return [r.ini, r.fi];
+  if (dia === r.data) return [r.ini, "24:00"];
+  if (dia === fin) return ["00:00", r.fi];
+  return ["00:00", "24:00"];
+}
+// Una reserva de diversos dies es marca una sola vegada per dia —a l'hora de
+// recollida el primer dia i a primera hora la resta— per no omplir la graella.
+function ancoraDelDia(r, dia) {
+  const desde = dia === r.data ? r.ini : "00:00";
+  const f = FRANGES.find((x) => !x.pati && !x.migdia && x.fi > desde);
+  return (f || FRANGES[0]).ini;
+}
+// Si aquesta reserva s'ha de dibuixar en aquesta cel·la de la graella
+function marcaEn(r, dia, f) {
+  if (!dia) return solapa(r.ini, r.fi, f.ini, f.fi);
+  if (esMultidia(r)) return ancoraDelDia(r, dia) === f.ini;
+  const [a, b] = horesDelDia(r, dia);
+  return solapa(a, b, f.ini, f.fi);
 }
 // Comprova dates i hores abans d'enviar-ho a la base de dades.
 // Si la reserva ocupa més d'un dia, l'hora de retorn pot ser anterior a la de
@@ -1035,6 +1066,8 @@ function reservesDemo(setmana) {
     { id: nextId(), tipus: "material", ref: "FLX4", refNom: "Controladora DDJ-FLX4", quantitat: 4, sol: "Toni Contreras", rol: "Professor", assignatura: "So en directe", data: setmana[1], torn: "mati", ini: "12:20", fi: "14:10", motiu: "Classe DJ", estat: "confirmada" },
     { id: nextId(), tipus: "material", ref: "ZOOM-H5", refNom: "Zoom H5", quantitat: 2, sol: "Núria Solé", rol: "Professor", assignatura: "Comunicació Audiovisual", data: setmana[3], torn: "tarda", ini: "16:00", fi: "17:50", motiu: "So directe", estat: "confirmada" },
     { id: nextId(), tipus: "espai", ref: "Aula Moviment", refNom: "Aula Moviment", persones: 4, sol: "Grup teatre", rol: "Alumne", data: setmana[2], torn: "tarda", ini: "14:10", fi: "16:00", motiu: "Assaig", estat: "pendent", foraHorari: true },
+    // Préstec de cap de setmana: es recull divendres a la tarda i es torna dilluns al matí
+    { id: nextId(), tipus: "material", ref: "MAL-SONY", refNom: "Maleta Càmera Sony a7s II", quantitat: 1, sol: "Pau Grau", rol: "Alumne", professor: "Mireia Devesa", assignatura: "Realització", data: setmana[4], dataFi: addDaysIso(setmana[4], 3), torn: "tarda", ini: "18:20", fi: "09:00", motiu: "Projecte personal", estat: "confirmada", foraHorari: true },
     { id: nextId(), tipus: "material", ref: "STUDIO-G2", refNom: "Blackmagic Studio Camera 4K Plus G2", quantitat: 1, sol: "Pau Grau", rol: "Alumne", professor: "Mireia Devesa", assignatura: "Realització", data: setmana[1], torn: "mati", ini: "11:20", fi: "13:15", motiu: "Pràctica plató", estat: "pendent", origen: "escaneig", lot: "Ldemo" },
     { id: nextId(), tipus: "material", ref: "ZOOM-H5", refNom: "Zoom H5", quantitat: 2, sol: "Pau Grau", rol: "Alumne", professor: "Mireia Devesa", assignatura: "Realització", data: setmana[1], torn: "mati", ini: "11:20", fi: "13:15", motiu: "Pràctica plató", estat: "pendent", origen: "escaneig", lot: "Ldemo" },
     { id: nextId(), tipus: "material", ref: "TRIP-MK290", refNom: "Trípode Manfrotto MK290", quantitat: 1, sol: "Pau Grau", rol: "Alumne", professor: "Mireia Devesa", assignatura: "Realització", data: setmana[1], torn: "mati", ini: "11:20", fi: "13:15", motiu: "Pràctica plató", estat: "pendent", origen: "escaneig", lot: "Ldemo" },
@@ -1319,7 +1352,7 @@ function WeekNav({ wk }) {
   return (
     <div className="weeknav">
       <button className="wbtn" disabled={!wk.canPrev} onClick={() => wk.shift(-1)} aria-label="Setmana anterior">‹</button>
-      <div className="wlabel">{dfmt(wk.dates[0])} – {dfmt(wk.dates[4])} {wk.dates[4].slice(0, 4)}</div>
+      <div className="wlabel">{dfmt(wk.dates[0])} – {dfmt(wk.dates[wk.dates.length - 1])} {wk.dates[wk.dates.length - 1].slice(0, 4)}</div>
       <button className="wbtn" disabled={!wk.canNext} onClick={() => wk.shift(1)} aria-label="Setmana següent">›</button>
       <button className="wtoday" onClick={wk.anar}>Avui</button>
     </div>
@@ -1327,18 +1360,19 @@ function WeekNav({ wk }) {
 }
 
 /* ---------- Reixa setmanal ---------- */
-function WeekGrid({ entriesFor, hintFor, onCell, clickable, dates, holidayOf, compact, onEntrada }) {
+function WeekGrid({ entriesFor, hintFor, onCell, clickable, dates, holidayOf, compact, onEntrada, dies = DIES }) {
   const canClick = (di, f) => !!onCell && (!clickable || clickable(di, f));
   const holi = (di) => (dates && holidayOf ? holidayOf(dates[di]) : null);
+  const cap = (di) => (di >= DIES.length ? " cap-setmana" : "");
   return (
     <div className={"gridwrap" + (compact ? " compact" : "")}>
       <table className="week">
-        <thead><tr><th className="hcol">Hora</th>{DIES.map((d, di) => {
+        <thead><tr><th className="hcol">Hora</th>{dies.map((d, di) => {
           const iso = dates ? dates[di] : null; const h = holi(di);
           return (
-            <th key={d} className={h ? "festiu-h " + h.tipus : ""}>
-              <div className="thn">{compact ? d.slice(0, 2) : d}</div>
-              {iso && <div className="thd">{(+iso.slice(8)) + "/" + (+iso.slice(5, 7))}</div>}
+            <th key={d} className={(h ? "festiu-h " + h.tipus : "") + cap(di)}>
+              <div className="thn">{compact ? (ABREV[d] || d.slice(0, 2)) : d}</div>
+              {iso && <div className="thd">{diaMes(iso)}</div>}
               {h && <div className="thf">{h.label}</div>}
             </th>
           );
@@ -1348,15 +1382,15 @@ function WeekGrid({ entriesFor, hintFor, onCell, clickable, dates, holidayOf, co
             <tr key={f.ini} className={f.pati ? "pati" : f.migdia ? "migdia" : ""}>
               <td className="hcol">{f.ini}<span className="fdash">–{f.fi}</span></td>
               {f.pati || f.migdia
-                ? DIES.map((d, di) => <td key={d} className={"brk" + (holi(di) ? " festiu " + holi(di).tipus : "")}>{f.pati ? "Pati" : "—"}</td>)
-                : DIES.map((d, di) => {
+                ? dies.map((d, di) => <td key={d} className={"brk" + (holi(di) ? " festiu " + holi(di).tipus : "") + cap(di)}>{f.pati ? "Pati" : "—"}</td>)
+                : dies.map((d, di) => {
                   const h = holi(di);
                   if (h) return <td key={d} className={"festiu " + h.tipus}></td>;
                   const es = entriesFor(di, f);
                   const hint = hintFor && hintFor(di, f);
                   const clic = canClick(di, f);
                   return (
-                    <td key={d} className={(hint ? "reservable " : "") + (clic ? "clik" : "")} onClick={clic ? () => onCell(di, f) : undefined}>
+                    <td key={d} className={(hint ? "reservable " : "") + (clic ? "clik" : "") + cap(di)} onClick={clic ? () => onCell(di, f) : undefined}>
                       {es.map((e, i) => (e.r && onEntrada
                         ? <button key={i} className="chip clicable" style={{ borderColor: e.color, color: e.color }}
                             title="Clica per editar o anul·lar la reserva"
@@ -1391,10 +1425,11 @@ function Inici({ reserves, rol, usuari, onEditarReserva }) {
     }
     return { mat, esp };
   }, [reserves, wk.dates]);
-  const matFor = (di, f) => perDia.mat[di].filter((r) => solapa(r.ini, r.fi, f.ini, f.fi))
-    .map((r) => ({ label: `${r.refNom}${r.quantitat ? " ×" + r.quantitat : ""}`, color: r.estat === "confirmada" ? BRAND.blau : BRAND.groc, r }));
-  const espFor = (di, f) => perDia.esp[di].filter((r) => solapa(r.ini, r.fi, f.ini, f.fi))
-    .map((r) => ({ label: `${r.ref} · ${r.sol}`, color: r.estat === "confirmada" ? BRAND.blau : BRAND.groc, r }));
+  const rang = (r) => (esMultidia(r) ? ` · ${diaMes(r.data)}→${diaMes(finDe(r))}` : "");
+  const matFor = (di, f) => perDia.mat[di].filter((r) => marcaEn(r, wk.dates[di], f))
+    .map((r) => ({ label: `${r.refNom}${r.quantitat ? " ×" + r.quantitat : ""}${rang(r)}`, color: r.estat === "confirmada" ? BRAND.blau : BRAND.groc, r }));
+  const espFor = (di, f) => perDia.esp[di].filter((r) => marcaEn(r, wk.dates[di], f))
+    .map((r) => ({ label: `${r.ref} · ${r.sol}${rang(r)}`, color: r.estat === "confirmada" ? BRAND.blau : BRAND.groc, r }));
   return (
     <div>
       <div className="hero">
@@ -1406,12 +1441,12 @@ function Inici({ reserves, rol, usuari, onEditarReserva }) {
       <div className="dualcal">
         <div className="calcol">
           <h2 className="h2">Reserves de material</h2>
-          <WeekGrid entriesFor={matFor} dates={wk.dates} holidayOf={festiu} compact onEntrada={onEditarReserva} />
+          <WeekGrid entriesFor={matFor} dates={wk.dates} holidayOf={festiu} compact dies={DIES_SETMANA} onEntrada={onEditarReserva} />
         </div>
         <div className="calcol">
           <h2 className="h2">Reserves d'espais</h2>
           <p className="nota" style={{ margin: "-6px 0 8px" }}>Només reserves fetes pel professorat i l'alumnat. No inclou l'horari lectiu.</p>
-          <WeekGrid entriesFor={espFor} dates={wk.dates} holidayOf={festiu} compact onEntrada={onEditarReserva} />
+          <WeekGrid entriesFor={espFor} dates={wk.dates} holidayOf={festiu} compact dies={DIES_SETMANA} onEntrada={onEditarReserva} />
         </div>
       </div>
     </div>
@@ -1785,20 +1820,22 @@ function Espais({ espais, reserves, crearReserva, rol, usuari, profes, assignatu
   const sel = espais.length ? (espais.find((e) => e.nom === selNom) || espais[0]) : null;
   const nomSel = sel ? sel.nom : "";
   const dadesEspai = useMemo(() => {
-    const lect = DIES.map((dia) => horari.filter((h) => h.espai === nomSel && h.dia === dia));
-    const res = wk.dates.map((d) => reserves.filter((r) => r.tipus === "espai" && r.ref === nomSel && r.data === d && esActiva(r)));
+    // Dissabte i diumenge no tenen horari lectiu, però han de tenir columna
+    const lect = DIES_SETMANA.map((dia) => horari.filter((h) => h.espai === nomSel && h.dia === dia));
+    const res = wk.dates.map((d) => reserves.filter((r) => r.tipus === "espai" && r.ref === nomSel && esActiva(r) && d >= r.data && d <= finDe(r)));
     return { lect, res };
   }, [nomSel, reserves, wk.dates, horari]);
   if (!sel) return <Buit>No hi ha espais. Afegeix-ne des d'"Edició pestanyes".</Buit>;
   const proto = protocols[sel.nom];
   const entriesFor = (di, f) => [
     ...dadesEspai.lect[di].filter((h) => solapa(h.ini, h.fi, f.ini, f.fi)).map((h) => ({ label: h.label, color: BRAND.negre })),
-    ...dadesEspai.res[di].filter((r) => solapa(r.ini, r.fi, f.ini, f.fi)).map((r) => ({ label: `${r.sol} · ${r.motiu || "reserva"}`, color: r.estat === "confirmada" ? BRAND.blau : BRAND.groc, r })),
+    ...dadesEspai.res[di].filter((r) => marcaEn(r, wk.dates[di], f)).map((r) => ({ label: `${r.sol} · ${r.motiu || "reserva"}${esMultidia(r) ? ` · ${diaMes(r.data)}→${diaMes(finDe(r))}` : ""}`, color: r.estat === "confirmada" ? BRAND.blau : BRAND.groc, r })),
   ];
   const hintFor = proto ? (di, f) => proto.slots.some((s) => s.dia === DIES[di] && solapa(s.ini, s.fi, f.ini, f.fi)) : null;
-  // Una franja amb classe lectiva queda bloquejada: no es pot reservar
+  // Una franja amb classe lectiva queda bloquejada: no es pot reservar.
+  // El cap de setmana no es reserva des de la graella: cal fer-ho amb "Reservar".
   const ocupadaLectiu = (di, f) => dadesEspai.lect[di].some((h) => solapa(h.ini, h.fi, f.ini, f.fi));
-  const clickable = (di, f) => !ocupadaLectiu(di, f) && (proto ? hintFor(di, f) : true);
+  const clickable = (di, f) => di < DIES.length && !ocupadaLectiu(di, f) && (proto ? hintFor(di, f) : true);
   const onCell = (di, f) => {
     if (proto) { const idx = proto.slots.findIndex((s) => s.dia === DIES[di] && solapa(s.ini, s.fi, f.ini, f.fi)); if (idx < 0) return; setPreset({ slotIdx: idx }); }
     else setPreset({ data: wk.dates[di], ini: f.ini, fi: f.fi });
@@ -1828,7 +1865,7 @@ function Espais({ espais, reserves, crearReserva, rol, usuari, profes, assignatu
         </div>
         <p className="nota" style={{ margin: "0 0 8px" }}>Clica una franja lliure per reservar-hi{proto ? " (només les marcades)" : ""}. Clica una reserva existent per <b>editar-la o anul·lar-la</b>. Les classes lectives no es poden seleccionar.</p>
         <WeekNav wk={wk} />
-        <WeekGrid entriesFor={entriesFor} hintFor={hintFor} onCell={onCell} clickable={clickable} dates={wk.dates} holidayOf={festiu} onEntrada={onEditarReserva} />
+        <WeekGrid entriesFor={entriesFor} hintFor={hintFor} onCell={onCell} clickable={clickable} dates={wk.dates} holidayOf={festiu} dies={DIES_SETMANA} onEntrada={onEditarReserva} />
         {proto
           ? <p className="nota" style={{ marginTop: 10 }}>Fora d'horari només es pot reservar a les franges marcades. {proto.nota}</p>
           : <p className="nota" style={{ marginTop: 10 }}>Les franges amb classe lectiva apareixen en negre i no es poden reservar.</p>}
@@ -2949,6 +2986,10 @@ const css = `
 .week th.festiu-h.vac { background:#eef2fb; } .week th.festiu-h.vac .thf { color:#5b76c4; }
 .week th.festiu-h.fora { background:#f4f4f4; } .week th.festiu-h.fora .thf { color:#999; }
 .week th.festiu-h.lliure .thf { color:#c9932a; }
+.week th.cap-setmana { background:#f3f4f6; color:#8b8b8b; }
+.week th.cap-setmana.festiu-h { background:#eef2fb; }
+.week td.cap-setmana { background:#fcfcfd; }
+.week tr.pati td.cap-setmana, .week tr.migdia td.cap-setmana { background:#f7f7f8; }
 .week td.festiu { background:#fbeaea; }
 .week td.festiu.vac { background:#eef2fb; }
 .week td.festiu.fora { background:#f5f5f5; }
