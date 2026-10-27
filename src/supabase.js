@@ -97,7 +97,7 @@ export const db = {
     });
     return {
       material: (mat.data || []).map(matDeDB),
-      espais: (esp.data || []).map((e) => ({ nom: e.nom, equipament: e.equipament || "", foraHorari: !!e.fora_horari, reservable: e.reservable !== false })),
+      espais: (esp.data || []).map((e) => ({ nom: e.nom, equipament: e.equipament || "", foraHorari: !!e.fora_horari, reservable: e.reservable !== false, responsable: e.responsable_email || "" })),
       protocols,
       assignatures: (ass.data || []).map((a) => a.nom),
       assigProfs: Object.fromEntries((ass.data || []).map((a) => [a.nom, a.professors || []])),
@@ -172,7 +172,7 @@ export const db = {
   /* ---------- Espais i catàlegs ---------- */
   async desaEspais(espais) {
     const { error } = await supabase.from("espais").upsert(
-      espais.map((e) => ({ nom: e.nom, equipament: e.equipament, fora_horari: !!e.foraHorari, reservable: e.reservable !== false })),
+      espais.map((e) => ({ nom: e.nom, equipament: e.equipament, fora_horari: !!e.foraHorari, reservable: e.reservable !== false, responsable_email: e.responsable || null })),
       { onConflict: "nom" }
     );
     if (error) throw error;

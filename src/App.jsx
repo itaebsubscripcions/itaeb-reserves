@@ -925,18 +925,31 @@ const ESPAIS_SEED = [
   { nom: "2n VDJ", equipament: "Aula de grup" },
   { nom: "1r BTX Escènic", equipament: "Aula de grup" },
   { nom: "2n BTX Escènic", equipament: "Aula de grup" },
-  { nom: "Aula Polivalent 2", equipament: "Espai diàfan", foraHorari: true },
-  { nom: "Aula Moviment", equipament: "Terra tècnic, miralls", foraHorari: true },
-  { nom: "Aula Assaig i Combo", equipament: "Backline, PA, pianos", foraHorari: true },
+  { nom: "Polivalent 02", equipament: "Espai diàfan", foraHorari: true, responsable: "rgranel@itaeb.cat" },
+  { nom: "Moviment (planta baixa)", equipament: "Terra tècnic, miralls", foraHorari: true, responsable: "mmanyoses@itaeb.cat" },
+  { nom: "Locutori_02", equipament: "Cabina de locució", foraHorari: true, responsable: "nsole@itaeb.cat" },
+  { nom: "Locutori_03", equipament: "Backline, PA, pianos", foraHorari: true },
 ];
 
+// Franges dels protocols 26-27, partides en blocs d'1 h 30 min.
+// La nota recorda l'antelació mínima que demana cada protocol.
+const ANTELACIO_DIES = 7;
+const NOTA_PROTO = `Cal demanar-ho amb ${ANTELACIO_DIES} dies d'antelació com a mínim.`;
+const blocs = (dia, ini, fi) => {
+  const m = (h) => +h.slice(0, 2) * 60 + +h.slice(3, 5);
+  const hhmm = (x) => String(Math.floor(x / 60)).padStart(2, "0") + ":" + String(x % 60).padStart(2, "0");
+  const a = m(ini), b = m(fi), d = b - a;
+  // Blocs de 90 min; si l'últim tros és de menys de 45 min, s'afegeix a l'anterior
+  const n = Math.max(1, Math.floor(d / 90) + (d % 90 >= 45 ? 1 : 0));
+  return Array.from({ length: n }, (_, i) => ({ dia, ini: hhmm(a + i * 90), fi: i === n - 1 ? fi : hhmm(a + (i + 1) * 90) }));
+};
 const PROTOCOLS = {
-  "Aula Moviment": { max: 15, nota: "Només alumnat de torn de matí. Màxim 15 alumnes.", slots: [
-    { dia: "Dilluns", ini: "15:00", fi: "17:50" }, { dia: "Dimecres", ini: "14:10", fi: "16:00" }, { dia: "Dijous", ini: "14:10", fi: "16:55" } ] },
-  "Aula Polivalent 2": { max: 4, nota: "Només alumnat de torn de matí. Màxim 4 persones.", slots: [
-    { dia: "Dimecres", ini: "15:00", fi: "16:30" }, { dia: "Dimecres", ini: "16:30", fi: "18:00" } ] },
-  "Aula Assaig i Combo": { max: 6, nota: "Preferència 1r BTX Arts Escèniques. Màx. 6; només 1 persona externa.", slots: [
-    { dia: "Dimecres", ini: "15:00", fi: "16:30" }, { dia: "Dimecres", ini: "16:30", fi: "18:00" }, { dia: "Dimecres", ini: "18:00", fi: "19:30" } ] },
+  "Moviment (planta baixa)": { max: 15, nota: NOTA_PROTO, slots: [
+    ...blocs("Dilluns", "15:00", "21:00"), ...blocs("Dimarts", "15:00", "21:00"), ...blocs("Dijous", "11:30", "14:00") ] },
+  "Polivalent 02": { max: 10, nota: NOTA_PROTO, slots: [
+    ...blocs("Dilluns", "15:00", "21:00"), ...blocs("Dimarts", "15:00", "21:00"), ...blocs("Divendres", "08:00", "12:00") ] },
+  "Locutori_02": { max: 6, nota: NOTA_PROTO, slots: [
+    ...blocs("Dimarts", "08:00", "11:00"), ...blocs("Dimarts", "15:00", "21:00"), ...blocs("Dimecres", "16:00", "21:00") ] },
 };
 
 const HORARI_LECTIU = [
@@ -949,6 +962,17 @@ const HORARI_LECTIU = [
 
 const PROFES_NOMS = ["Klaudia Álvarez", "Albert Anglada", "David Anguera", "David Arnaiz", "Paloma Bañuls", "Joana Castellano", "Mireia Cequiel", "Mercedes Collado", "Toni Contreras", "Eva Cruces", "Mireia Devesa", "Òscar Fernández", "Laura Fité", "Miguel Giménez", "Ada González", "Roger Granel", "Mònica Hernández", "Carmen Jiménez", "David Llamas", "Roberto López", "Meritxell Manyoses", "Albert Martí", "Anna Maria Martínez", "Álex Moreno", "Mònica Moreno", "Mariona Naudín", "David Pagès", "Joan Pedroche", "Tanit Plana", "Míriam Prieto", "Baldesca Punter", "Inma Redón", "Jaume Ricart", "Francesco Sinopoli", "Núria Solé", "Natalia Uviña", "Rubén Ventura", "Albert Villalbí", "Isabel Yuste"];
 const PROFES = PROFES_NOMS.map((n) => ({ nom: n, email: correuDe(n) }));
+// Només per al MODE DEMO: permet provar l'aplicació des de diferents persones,
+// inclòs el professorat responsable dels espais fora d'horari.
+const DEMO_PERSONES = [
+  { rol: "Professor", nom: "Mireia Devesa", email: correuDe("Mireia Devesa") },
+  { rol: "Professora", nom: "Meritxell Manyoses", email: "mmanyoses@itaeb.cat", espai: "Moviment", rolReal: "Professor" },
+  { rol: "Professor", nom: "Roger Granel", email: "rgranel@itaeb.cat", espai: "Polivalent 02" },
+  { rol: "Professora", nom: "Núria Solé", email: "nsole@itaeb.cat", espai: "Locutori_02", rolReal: "Professor" },
+  { rol: "Alumne", nom: "Laia Ferrer", email: "laia.ferrer@itaeb.cat" },
+  { rol: "Consergeria", nom: "Consergeria", email: "consergeria@itaeb.cat" },
+  { rol: "Administrador", nom: "Direcció tècnica", email: "direccio@itaeb.cat" },
+].map((p) => ({ ...p, rol: p.rolReal || p.rol, etiqueta: p.rol }));
 const ASSIGNATURES = ["Presa i edició digital d'imatge", "Creació Fotogràfica i Cinema", "Comunicació Audiovisual", "Projecte Audiovisual 2n BXT", "Realització", "Il·luminació", "So en directe", "Tècnica vocal", "Maquillatge", "Escenografia", "Moviment", "Tecnologia I", "Dibuix Tècnic I", "Música i comunicació"];
 const ALUMNES_SEED = [
   { nom: "Laia Ferrer", email: "laia.ferrer@itaeb.cat", grup: "1r BTX AV" },
@@ -958,7 +982,6 @@ const ALUMNES_SEED = [
   { nom: "Júlia Serra", email: "julia.serra@itaeb.cat", grup: "1r BTX Escènic" },
   { nom: "Nil Camps", email: "nil.camps@itaeb.cat", grup: "2n BTX Escènic" },
 ];
-const ROLS = ["Alumne", "Professor", "Consergeria", "Administrador"];
 const nomsDe = (llista) => llista.map((p) => (typeof p === "string" ? p : p.nom));
 
 let _id = 100;
@@ -971,9 +994,10 @@ function weekDates(baseIso) {
   const mon = new Date(d); mon.setDate(d.getDate() - off);
   return [0, 1, 2, 3, 4, 5, 6].map((i) => { const x = new Date(mon); x.setDate(mon.getDate() + i); return isoOf(x); });
 }
-function nextDateForDay(diaIdx) {
+// Primera data d'aquest dia de la setmana, com a mínim d'aquí a `minDies` dies
+function nextDateForDay(diaIdx, minDies = 0) {
   const t = new Date(avui() + "T00:00:00");
-  for (let i = 0; i < 14; i++) { const x = new Date(t); x.setDate(t.getDate() + i); if (((x.getDay() + 6) % 7) === diaIdx) return isoOf(x); }
+  for (let i = minDies; i < minDies + 14; i++) { const x = new Date(t); x.setDate(t.getDate() + i); if (((x.getDay() + 6) % 7) === diaIdx) return isoOf(x); }
   return avui();
 }
 const solapa = (aI, aF, bI, bF) => aI < bF && aF > bI;
@@ -1065,7 +1089,8 @@ function reservesDemo(setmana) {
     { id: nextId(), tipus: "material", ref: "SONY-A67", refNom: "Sony a6700", quantitat: 1, sol: "Laia Ferrer", rol: "Alumne", professor: "Mireia Devesa", assignatura: "Presa i edició digital d'imatge", data: setmana[0], torn: "mati", ini: "09:00", fi: "10:50", motiu: "Reportatge", estat: "pendent" },
     { id: nextId(), tipus: "material", ref: "FLX4", refNom: "Controladora DDJ-FLX4", quantitat: 4, sol: "Toni Contreras", rol: "Professor", assignatura: "So en directe", data: setmana[1], torn: "mati", ini: "12:20", fi: "14:10", motiu: "Classe DJ", estat: "confirmada" },
     { id: nextId(), tipus: "material", ref: "ZOOM-H5", refNom: "Zoom H5", quantitat: 2, sol: "Núria Solé", rol: "Professor", assignatura: "Comunicació Audiovisual", data: setmana[3], torn: "tarda", ini: "16:00", fi: "17:50", motiu: "So directe", estat: "confirmada" },
-    { id: nextId(), tipus: "espai", ref: "Aula Moviment", refNom: "Aula Moviment", persones: 4, sol: "Grup teatre", rol: "Alumne", data: setmana[2], torn: "tarda", ini: "14:10", fi: "16:00", motiu: "Assaig", estat: "pendent", foraHorari: true },
+    { id: nextId(), tipus: "espai", ref: "Moviment (planta baixa)", refNom: "Moviment (planta baixa)", persones: 8, sol: "Júlia Serra", solEmail: "julia.serra@itaeb.cat", rol: "Alumne", data: setmana[0], torn: "tarda", ini: "15:00", fi: "16:30", motiu: "Assaig coreografia", estat: "pendent", foraHorari: true },
+    { id: nextId(), tipus: "espai", ref: "Locutori_02", refNom: "Locutori_02", persones: 3, sol: "Nil Camps", solEmail: "nil.camps@itaeb.cat", rol: "Alumne", data: setmana[2], torn: "tarda", ini: "16:00", fi: "17:30", motiu: "Gravació pòdcast", estat: "pendent", foraHorari: true },
     // Préstec de cap de setmana: es recull divendres a la tarda i es torna dilluns al matí
     { id: nextId(), tipus: "material", ref: "MAL-SONY", refNom: "Maleta Càmera Sony a7s II", quantitat: 1, sol: "Pau Grau", rol: "Alumne", professor: "Mireia Devesa", assignatura: "Realització", data: setmana[4], dataFi: addDaysIso(setmana[4], 3), torn: "tarda", ini: "18:20", fi: "09:00", motiu: "Projecte personal", estat: "confirmada", foraHorari: true },
     { id: nextId(), tipus: "material", ref: "STUDIO-G2", refNom: "Blackmagic Studio Camera 4K Plus G2", quantitat: 1, sol: "Pau Grau", rol: "Alumne", professor: "Mireia Devesa", assignatura: "Realització", data: setmana[1], torn: "mati", ini: "11:20", fi: "13:15", motiu: "Pràctica plató", estat: "pendent", origen: "escaneig", lot: "Ldemo" },
@@ -1079,7 +1104,7 @@ function reservesDemo(setmana) {
 
 export default function App() {
   const [sessio, setSessio] = useState(DEMO ? false : null);
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(DEMO ? DEMO_PERSONES[0].email : "");
   const [protocols, setProtocols] = useState(DEMO ? PROTOCOLS : {});
   const [horari, setHorari] = useState(DEMO ? HORARI_LECTIU : []);
   const [assigProfs, setAssigProfs] = useState({});
@@ -1139,11 +1164,25 @@ export default function App() {
     try { const d = await db.carregaTot(); setMaterial(d.material); setReserves(d.reserves); } catch (e) {}
   };
 
+  // Correu del professor/a responsable de l'espai d'una reserva fora d'horari
+  const responsableDe = (ref) => (espais.find((e) => e.nom === ref) || {}).responsable || "";
+  const nomDe = (correu) => (profes.find((p) => p.email === correu) || {}).nom || correu;
   const potAprovar = (r) => {
     if (rol === "Administrador") return true;
-    if (r.tipus === "espai" && (rol === "Consergeria" || (rol === "Professor" && !r.foraHorari))) return true;
+    // Els espais fora d'horari els valida el professorat responsable de l'espai,
+    // no pas consergeria. La base de dades ho torna a comprovar.
+    if (r.tipus === "espai" && r.foraHorari) return email === responsableDe(r.ref);
+    if (r.tipus === "espai" && (rol === "Consergeria" || rol === "Professor")) return true;
     if (r.tipus === "material" && (rol === "Professor" || (rol === "Consergeria" && r.origen === "escaneig"))) return true;
     return false;
+  };
+  // Una reserva neix confirmada només si qui la fa també la podria validar
+  const estatInicial = (nova) => {
+    if (rol === "Administrador") return "confirmada";
+    if (nova.tipus === "espai" && nova.foraHorari) return email === responsableDe(nova.ref) ? "confirmada" : "pendent";
+    if (nova.tipus === "espai" && (rol === "Professor" || rol === "Consergeria")) return "confirmada";
+    if (nova.tipus === "material" && rol === "Professor") return "confirmada";
+    return "pendent";
   };
   const pendents = reserves.filter((r) => r.estat === "pendent");
   const enPrestec = reserves.filter((r) => r.estat === "prestec");
@@ -1197,13 +1236,13 @@ export default function App() {
     const errDates = errorDeDates(nova);
     if (errDates) return notifica(errDates);
     if (nova.periodica) return crearReservaPeriodica(nova);
-    let estat = "pendent";
-    if (rol === "Administrador") estat = "confirmada";
-    else if (rol === "Professor" && !(nova.tipus === "espai" && nova.foraHorari)) estat = "confirmada";
-    else if (rol === "Consergeria" && nova.tipus === "espai") estat = "confirmada";
+    const estat = estatInicial(nova);
     const r = { ...nova, id: nextId(), sol: usuari, solEmail: email, rol, estat };
     setReserves((rs) => [r, ...rs]);
-    notifica(estat === "confirmada" ? "Reserva confirmada." : "Sol·licitud enviada. Pendent d'aprovació.");
+    notifica(estat === "confirmada" ? "Reserva confirmada."
+      : nova.tipus === "espai" && nova.foraHorari && responsableDe(nova.ref)
+        ? `Sol·licitud enviada a ${nomDe(responsableDe(nova.ref))}, responsable de l'espai.`
+        : "Sol·licitud enviada. Pendent d'aprovació.");
     setVista(nova.tipus === "espai" ? "espais" : "material");
     if (!DEMO) {
       try { const [creada] = await db.creaReserves([r]); setReserves((rs) => rs.map((x) => (x.id === r.id ? creada : x))); }
@@ -1211,10 +1250,7 @@ export default function App() {
     }
   };
   const crearReservaPeriodica = async (nova) => {
-    let estat = "pendent";
-    if (rol === "Administrador") estat = "confirmada";
-    else if (rol === "Professor" && !nova.foraHorari) estat = "confirmada";
-    else if (rol === "Consergeria") estat = "confirmada";
+    const estat = estatInicial(nova);
     const ocupada = (d) => reserves.some((r) => r.tipus === "espai" && r.ref === nova.ref && r.data === d && esActiva(r) && solapa(r.ini, r.fi, nova.ini, nova.fi));
     const dates = setmanesFinsFiCurs(nova.data);
     const lliures = dates.filter((d) => !ocupada(d));
@@ -1253,8 +1289,12 @@ export default function App() {
         <div className="whoami">
           <span className="who-name">{usuari}</span>
           {DEMO ? (
-            <select value={rol} onChange={(e) => { const nr = e.target.value; setRol(nr); setUsuari(nr === "Alumne" ? "Laia Ferrer" : nr === "Consergeria" ? "Consergeria" : nr === "Administrador" ? "Direcció tècnica" : "Mireia Devesa"); if (((nr === "Alumne" || nr === "Professor") && (vista === "admin" || vista === "persones")) || (nr === "Alumne" && (vista === "espais" || vista === "reparacions"))) setVista("inici"); }}>
-              {ROLS.map((r) => <option key={r}>{r}</option>)}
+            <select value={usuari} onChange={(ev) => {
+              const p = DEMO_PERSONES.find((x) => x.nom === ev.target.value) || DEMO_PERSONES[0];
+              setRol(p.rol); setUsuari(p.nom); setEmail(p.email);
+              if (((p.rol === "Alumne" || p.rol === "Professor") && (vista === "admin" || vista === "persones")) || (p.rol === "Alumne" && (vista === "espais" || vista === "reparacions"))) setVista("inici");
+            }}>
+              {DEMO_PERSONES.map((p) => <option key={p.nom} value={p.nom}>{p.etiqueta} · {p.nom}{p.espai ? ` (${p.espai})` : ""}</option>)}
             </select>
           ) : (
             <span className="rolpill" title="El teu rol el defineix l'administració">{rol}</span>
@@ -1274,12 +1314,12 @@ export default function App() {
         ))}
       </nav>
       <main className="main">
-        {vista === "inici" && <Inici {...{ reserves, rol, usuari }} onEditarReserva={setEditRes} />}
+        {vista === "inici" && <Inici {...{ reserves, rol, usuari, pendentsMeus }} onEditarReserva={setEditRes} onVeurePendents={() => setVista("sol.licituds")} />}
         {vista === "material" && <Material {...{ material, reserves, crearReserves, rol, usuari, profes, alumnes, assignatures, assigProfs, scan, setScan, notifica }} />}
         {vista === "espais" && rol !== "Alumne" && <Espais {...{ espais: espais.filter((e) => e.reservable !== false), reserves, crearReserva, rol, usuari, profes, assignatures, assigProfs, protocols, horari }} onEditarReserva={setEditRes} />}
         {vista === "fora" && <ForaHorari {...{ espais: espais.filter((e) => e.reservable !== false), material, reserves, crearReserva, rol, usuari, profes, assignatures, assigProfs, protocols }} />}
         {vista === "escaneig" && <Escaneig {...{ material, reserves, crearReserves, rol, usuari, profes, alumnes, assignatures, assigProfs, notifica }} />}
-        {vista === "sol.licituds" && <Solicituds {...{ pendents, enPrestec, potAprovar, resolReserva, resolMolts, registrarRetorn, rol }} />}
+        {vista === "sol.licituds" && <Solicituds {...{ pendents, enPrestec, potAprovar, resolReserva, resolMolts, registrarRetorn, rol }} validadorDe={(r) => (responsableDe(r.ref) ? nomDe(responsableDe(r.ref)) : "")} />}
         {vista === "reparacions" && rol !== "Alumne" && <Reparacions {...{ incidencies, setMaterial, notifica }} />}
         {vista === "historial" && <Historial reserves={reserves} onEdit={setEditRes} />}
         {vista === "admin" && gestor && <Admin {...{ material, setMaterial, notifica }} />}
@@ -1409,7 +1449,7 @@ function WeekGrid({ entriesFor, hintFor, onCell, clickable, dates, holidayOf, co
 }
 
 /* ---------------- INICI ---------------- */
-function Inici({ reserves, rol, usuari, onEditarReserva }) {
+function Inici({ reserves, rol, usuari, onEditarReserva, pendentsMeus = [], onVeurePendents }) {
   // Salutació segons l'hora, amb el nom real de qui ha entrat
   const h = new Date().getHours();
   const salutacio = h < 14 ? "Bon dia" : h < 21 ? "Bona tarda" : "Bona nit";
@@ -1436,6 +1476,16 @@ function Inici({ reserves, rol, usuari, onEditarReserva }) {
         <h1>{salutacio}{nom ? `, ${nom}` : ""}.</h1>
         <p>Resum setmanal sobre l'horari del centre. Mou-te pel curs 2026-27 amb les fletxes; els festius apareixen marcats.</p>
       </div>
+      {pendentsMeus.length > 0 && (
+        <button className="avis-pendents" onClick={onVeurePendents}>
+          <span className="avis-num">{pendentsMeus.length}</span>
+          <span>
+            <b>{pendentsMeus.length === 1 ? "Tens una sol·licitud pendent de validar" : `Tens ${pendentsMeus.length} sol·licituds pendents de validar`}</b>
+            <span className="avis-det">{[...new Set(pendentsMeus.map((r) => r.refNom || r.ref))].slice(0, 3).join(" · ")}{pendentsMeus.length > 3 ? "…" : ""}</span>
+          </span>
+          <span className="avis-anar">Revisa-les →</span>
+        </button>
+      )}
       <div className="legend"><span><i style={{ background: BRAND.blau }} /> Confirmada</span><span><i style={{ background: BRAND.groc }} /> Pendent</span><span><i style={{ background: "#fbeaea" }} /> Festiu</span><span><i style={{ background: "#eef2fb" }} /> Vacances</span></div>
       <WeekNav wk={wk} />
       <div className="dualcal">
@@ -1879,10 +1929,12 @@ function FormEspai({ e, rol, usuari, preset, onClose, onSubmit, profes = PROFES,
   const proto = protocols[e.nom];
   const fora = !!proto;
   const esAlumne = rol === "Alumne";
+  const responsableNom = e.responsable ? ((profes.find((p) => p.email === e.responsable) || {}).nom || e.responsable) : "";
   const initSlot = fora ? (preset?.slotIdx ?? 0) : 0;
   const [slotIdx, setSlotIdx] = useState(initSlot);
   const slot = fora ? proto.slots[slotIdx] : null;
-  const [data, setData] = useState(fora ? nextDateForDay(DIES.indexOf(proto.slots[initSlot].dia)) : (preset?.data ?? avui()));
+  // Els protocols demanen 7 dies d'antelació: s'hi proposa la primera data vàlida
+  const [data, setData] = useState(fora ? nextDateForDay(DIES.indexOf(proto.slots[initSlot].dia), ANTELACIO_DIES) : (preset?.data ?? avui()));
   const [ini, setIni] = useState(fora ? proto.slots[initSlot].ini : (preset?.ini ?? "09:00"));
   const [fi, setFi] = useState(fora ? proto.slots[initSlot].fi : (preset?.fi ?? "10:50"));
   const [persones, setPersones] = useState(2);
@@ -1890,7 +1942,7 @@ function FormEspai({ e, rol, usuari, preset, onClose, onSubmit, profes = PROFES,
   const [motiu, setMotiu] = useState("");
   const [assig, setAssig] = useState("");
   const [profs, setProfs] = useState([]);
-  const triaSlot = (idx) => { setSlotIdx(idx); const s = proto.slots[idx]; setIni(s.ini); setFi(s.fi); setData(nextDateForDay(DIES.indexOf(s.dia))); };
+  const triaSlot = (idx) => { setSlotIdx(idx); const s = proto.slots[idx]; setIni(s.ini); setFi(s.fi); setData(nextDateForDay(DIES.indexOf(s.dia), ANTELACIO_DIES)); };
   return (
     <Modal onClose={onClose} titol={`Reservar · ${e.nom}`}>
       <p className="modal-sub">{e.equipament}</p>
@@ -1917,7 +1969,7 @@ function FormEspai({ e, rol, usuari, preset, onClose, onSubmit, profes = PROFES,
         </>
       )}
       <Camp l="Motiu"><textarea rows="2" value={motiu} onChange={(ev) => setMotiu(ev.target.value)} /></Camp>
-      {fora ? <p className="modal-note">Espai <b>fora d'horari</b>: requereix aprovació de consergeria/administració. {proto.nota}</p>
+      {fora ? <p className="modal-note">Espai <b>fora d'horari</b>: la validarà {responsableNom ? <b>{responsableNom}</b> : "el professorat responsable de l'espai"}, responsable de l'espai. {proto.nota}</p>
         : (esAlumne ? <p className="modal-note">Com a alumne no pots reservar espais dins d'horari lectiu. Contacta amb el professorat.</p> : <p className="modal-note">El professorat de l'assignatura confirma la reserva automàticament.</p>)}
       <div className="modal-act"><button className="btn ghost" onClick={onClose}>Cancel·la</button>
         <button className="btn prim" disabled={!fora && esAlumne} onClick={() => onSubmit({ tipus: "espai", ref: e.nom, refNom: e.nom, periodica, persones: fora ? persones : undefined, data, torn: ini < "15:00" ? "mati" : "tarda", ini, fi, motiu, assignatura: assig, professors: profs, professor: profs[0] || "", foraHorari: fora })}>{rol === "Professor" && !fora ? "Confirma reserva" : "Envia sol·licitud"}</button>
@@ -1938,17 +1990,31 @@ function ForaHorari({ espais, material, reserves, crearReserva, rol, usuari, pro
     <div>
       <div className="hero small" style={{ borderLeftColor: BRAND.groc }}>
         <h1>Reserves fora d'horari lectiu</h1>
-        <p>Per a projectes personals i lectius. Espais: només a les franges dels protocols, aprovades per consergeria. Maletes: validades pel tutor/professor.</p>
+        <p>Per a projectes personals i lectius. Espais: només a les franges dels protocols, i les valida el professorat responsable de cada espai. Maletes: validades pel tutor/professor.</p>
       </div>
       <h2 className="h2">Aules disponibles fora d'horari</h2>
       <div className="grid">
         {aules.map((e) => {
           const p = protocols[e.nom];
+          const resp = e.responsable ? ((profes.find((x) => x.email === e.responsable) || {}).nom || e.responsable) : "";
+          // Finestres del protocol: els blocs seguits es mostren com un sol tram,
+          // i un dia amb dues finestres separades (matí i tarda) surt dues vegades
+          const dies = p ? [...new Set(p.slots.map((s) => s.dia))].flatMap((d) => {
+            const f = p.slots.filter((s) => s.dia === d).sort((a, b) => a.ini.localeCompare(b.ini));
+            const trams = [];
+            for (const s of f) {
+              const ult = trams[trams.length - 1];
+              if (ult && ult.fi === s.ini) ult.fi = s.fi;
+              else trams.push({ ini: s.ini, fi: s.fi });
+            }
+            return trams.map((t) => `${ABREV[d] || d.slice(0, 2)} ${t.ini}–${t.fi}`);
+          }).join(" · ") : "";
           return (
-            <button key={e.nom} className="card" onClick={() => setSel(e)}>
+            <button key={e.nom} className={"card" + (p ? "" : " card-off")} disabled={!p} onClick={() => p && setSel(e)}>
               <div className="card-top"><span className="codi">Aula</span>{p && <span className="badge" style={{ background: BRAND.groc }}>Màx. {p.max}</span>}</div>
               <div className="card-nom">{e.nom}</div>
-              <div className="card-meta">{p ? p.slots.map((s) => `${s.dia.slice(0, 3)} ${s.ini}`).join(" · ") : "Sense franges de protocol definides"}</div>
+              <div className="card-meta">{p ? dies : "Pendent de protocol: encara no s'hi pot reservar"}</div>
+              {resp && <div className="card-meta" style={{ marginTop: 4 }}>Valida: <b>{resp}</b></div>}
             </button>
           );
         })}
@@ -1972,7 +2038,7 @@ function ForaHorari({ espais, material, reserves, crearReserva, rol, usuari, pro
 }
 
 /* ---------------- SOL·LICITUDS ---------------- */
-function Solicituds({ pendents, enPrestec, potAprovar, resolReserva, resolMolts, registrarRetorn, rol }) {
+function Solicituds({ pendents, enPrestec, potAprovar, resolReserva, resolMolts, registrarRetorn, rol, validadorDe = () => "" }) {
   const meves = pendents.filter(potAprovar);
   const altres = pendents.filter((r) => !potAprovar(r));
   const grups = []; const perLot = {};
@@ -2014,7 +2080,16 @@ function Solicituds({ pendents, enPrestec, potAprovar, resolReserva, resolMolts,
         })}
         {meves.length === 0 && <Buit>No tens sol·licituds pendents de resoldre.</Buit>}
       </div>
-      {altres.length > 0 && <><h2 className="h2" style={{ marginTop: 24 }}>Altres pendents (consulta)</h2><div className="list">{altres.map((r) => <FilaReserva key={r.id} r={r} />)}</div></>}
+      {altres.length > 0 && <>
+        <h2 className="h2" style={{ marginTop: 24 }}>Altres pendents (consulta)</h2>
+        <p className="nota">Les resol una altra persona. Els espais fora d'horari els valida el professorat responsable de cada espai.</p>
+        <div className="list">{altres.map((r) => (
+          <div key={r.id} className="sol">
+            <div className="sol-info"><FilaReserva r={r} inline />
+              {r.tipus === "espai" && r.foraHorari && <div className="sol-sub">Pendent de <b>{validadorDe(r) || "el professorat responsable de l'espai"}</b></div>}
+            </div>
+          </div>
+        ))}</div></>}
       <Devolucions {...{ enPrestec, potAprovar, registrarRetorn }} />
     </div>
   );
@@ -2786,6 +2861,14 @@ const css = `
 .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(215px,1fr)); gap:12px; }
 .card { text-align:left; border:1px solid #e8e8e8; border-radius:11px; padding:13px; background:#fff; cursor:pointer; transition:border-color .12s, box-shadow .12s; }
 .card:hover { border-color:${BRAND.blau}; box-shadow:0 2px 10px rgba(0,0,0,.05); }
+.avis-pendents { display:flex; align-items:center; gap:13px; width:100%; text-align:left; margin:0 0 16px; padding:13px 16px; border:1px solid ${BRAND.groc}; border-left:4px solid ${BRAND.groc}; border-radius:10px; background:#fffaec; cursor:pointer; font:inherit; font-size:13.5px; color:#101012; }
+.avis-pendents:hover { background:#fff5db; }
+.avis-num { flex:none; width:30px; height:30px; border-radius:50%; background:${BRAND.groc}; color:#fff; font-weight:800; display:flex; align-items:center; justify-content:center; }
+.avis-pendents > span:nth-child(2) { flex:1; display:flex; flex-direction:column; gap:2px; }
+.avis-det { font-size:12px; color:#8a7a4a; }
+.avis-anar { flex:none; font-size:12.5px; font-weight:700; color:${BRAND.blau}; }
+.card-off { cursor:default; background:#fbfbfb; border-style:dashed; opacity:.7; }
+.card-off:hover { border-color:#e8e8e8; box-shadow:none; }
 .card-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:7px; }
 .codi { font-family:ui-monospace, monospace; font-size:11px; color:#999; letter-spacing:.5px; }
 .card-nom { font-weight:700; font-size:14px; line-height:1.25; }
