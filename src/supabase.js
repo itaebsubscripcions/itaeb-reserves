@@ -73,9 +73,9 @@ const resADB = (r) => ({
 /* ---------- Lectures ---------- */
 export const db = {
   async perfil(email, nomGoogle) {
-    const { data } = await supabase.from("usuaris").select("nom, rol").eq("email", email).maybeSingle();
+    const { data } = await supabase.from("usuaris").select("nom, rol, veu_tot").eq("email", email).maybeSingle();
     // Si encara no consta a la taula usuaris, es mostra el nom del compte de Google
-    return { nom: data?.nom || nomGoogle || email.split("@")[0], rol: ROL_APP[data?.rol] || "Alumne" };
+    return { nom: data?.nom || nomGoogle || email.split("@")[0], rol: ROL_APP[data?.rol] || "Alumne", veuTot: !!data?.veu_tot };
   },
 
   async carregaTot() {

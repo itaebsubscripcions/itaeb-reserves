@@ -970,6 +970,7 @@ const DEMO_PERSONES = [
   { rol: "Professor", nom: "Roger Granel", email: "rgranel@itaeb.cat", espai: "Polivalent 02" },
   { rol: "Professora", nom: "Núria Solé", email: "nsole@itaeb.cat", espai: "Locutori_02", rolReal: "Professor" },
   { rol: "Alumne", nom: "Laia Ferrer", email: "laia.ferrer@itaeb.cat" },
+  { rol: "Alumne", nom: "Alumnat en pràctiques", email: "afelipe.alum.practiques@itaeb.cat", espai: "consulta general", veuTot: true },
   { rol: "Consergeria", nom: "Consergeria", email: "consergeria@itaeb.cat" },
   { rol: "Administrador", nom: "Direcció tècnica", email: "direccio@itaeb.cat" },
 ].map((p) => ({ ...p, rol: p.rolReal || p.rol, etiqueta: p.rol }));
@@ -1085,6 +1086,14 @@ function festiu(iso) {
 }
 
 function reservesDemo(setmana) {
+  // Correu de qui demana: fa falta per saber qui pot editar o anul·lar cada reserva
+  const correus = {
+    "Laia Ferrer": "laia.ferrer@itaeb.cat", "Marc Riu": "marc.riu@itaeb.cat",
+    "Aina Roca": "aina.roca@itaeb.cat", "Pau Grau": "pau.grau@itaeb.cat",
+    "Júlia Serra": "julia.serra@itaeb.cat", "Nil Camps": "nil.camps@itaeb.cat",
+    "Alumnat en pràctiques": "afelipe.alum.practiques@itaeb.cat",
+  };
+  const amb = (r) => ({ ...r, solEmail: r.solEmail || correus[r.sol] || correuDe(r.sol) });
   return [
     { id: nextId(), tipus: "material", ref: "SONY-A67", refNom: "Sony a6700", quantitat: 1, sol: "Laia Ferrer", rol: "Alumne", professor: "Mireia Devesa", assignatura: "Presa i edició digital d'imatge", data: setmana[0], torn: "mati", ini: "09:00", fi: "10:50", motiu: "Reportatge", estat: "pendent" },
     { id: nextId(), tipus: "material", ref: "FLX4", refNom: "Controladora DDJ-FLX4", quantitat: 4, sol: "Toni Contreras", rol: "Professor", assignatura: "So en directe", data: setmana[1], torn: "mati", ini: "12:20", fi: "14:10", motiu: "Classe DJ", estat: "confirmada" },
@@ -1099,12 +1108,15 @@ function reservesDemo(setmana) {
     { id: nextId(), tipus: "material", ref: "ZOOMH5", refNom: "Zoom H5", quantitat: 1, sol: "Aina Roca", rol: "Alumne", professor: "Mireia Devesa", assignatura: "Comunicació Audiovisual", data: setmana[0], torn: "mati", ini: "09:00", fi: "10:50", motiu: "Enregistrament exterior", estat: "prestec" },
     { id: nextId(), tipus: "material", ref: "ALPHA6700I", refNom: "Sony a6700", quantitat: 1, sol: "Aina Roca", rol: "Alumne", professor: "Mireia Devesa", assignatura: "Comunicació Audiovisual", data: setmana[0], torn: "mati", ini: "09:00", fi: "10:50", motiu: "Enregistrament exterior", estat: "prestec", lot: "Lpres" },
     { id: nextId(), tipus: "material", ref: "BGM113A", refNom: "Blackmagic Pocket Cinema 4K", quantitat: 1, sol: "Aina Roca", rol: "Alumne", professor: "Mireia Devesa", assignatura: "Comunicació Audiovisual", data: setmana[0], torn: "mati", ini: "09:00", fi: "10:50", motiu: "Enregistrament exterior", estat: "prestec", lot: "Lpres" },
-  ];
+    { id: nextId(), tipus: "material", ref: "TRIP-MK290", refNom: "Trípode Manfrotto MK290", quantitat: 1, sol: "Alumnat en pràctiques", rol: "Alumne", professor: "Mireia Devesa", assignatura: "Realització", data: setmana[2], torn: "mati", ini: "09:00", fi: "10:50", motiu: "Suport a consergeria", estat: "pendent" },
+  ].map(amb);
 }
 
 export default function App() {
   const [sessio, setSessio] = useState(DEMO ? false : null);
   const [email, setEmail] = useState(DEMO ? DEMO_PERSONES[0].email : "");
+  // Permís de consulta general: veu totes les reserves, però no en pot tocar cap
+  const [veuTot, setVeuTot] = useState(false);
   const [protocols, setProtocols] = useState(DEMO ? PROTOCOLS : {});
   const [horari, setHorari] = useState(DEMO ? HORARI_LECTIU : []);
   const [assigProfs, setAssigProfs] = useState({});
@@ -1136,8 +1148,8 @@ export default function App() {
       const nomGoogle = md.full_name || md.name || "";
       try {
         const p = await db.perfil(correu, nomGoogle);
-        setUsuari(p.nom); setRol(p.rol);
-      } catch (e) { setUsuari(nomGoogle || correu); setRol("Alumne"); }
+        setUsuari(p.nom); setRol(p.rol); setVeuTot(!!p.veuTot);
+      } catch (e) { setUsuari(nomGoogle || correu); setRol("Alumne"); setVeuTot(false); }
       setSessio(true);
     });
   }, []);
@@ -1176,6 +1188,9 @@ export default function App() {
     if (r.tipus === "material" && (rol === "Professor" || (rol === "Consergeria" && r.origen === "escaneig"))) return true;
     return false;
   };
+  // L'alumnat només pot modificar o anul·lar les seves pròpies reserves. Qui té
+  // permís de consulta general en veu moltes més: les obre en mode lectura.
+  const potEditarReserva = (r) => rol !== "Alumne" || r.solEmail === email;
   // Una reserva neix confirmada només si qui la fa també la podria validar
   const estatInicial = (nova) => {
     if (rol === "Administrador") return "confirmada";
@@ -1291,13 +1306,13 @@ export default function App() {
           {DEMO ? (
             <select value={usuari} onChange={(ev) => {
               const p = DEMO_PERSONES.find((x) => x.nom === ev.target.value) || DEMO_PERSONES[0];
-              setRol(p.rol); setUsuari(p.nom); setEmail(p.email);
+              setRol(p.rol); setUsuari(p.nom); setEmail(p.email); setVeuTot(!!p.veuTot);
               if (((p.rol === "Alumne" || p.rol === "Professor") && (vista === "admin" || vista === "persones")) || (p.rol === "Alumne" && (vista === "espais" || vista === "reparacions"))) setVista("inici");
             }}>
               {DEMO_PERSONES.map((p) => <option key={p.nom} value={p.nom}>{p.etiqueta} · {p.nom}{p.espai ? ` (${p.espai})` : ""}</option>)}
             </select>
           ) : (
-            <span className="rolpill" title="El teu rol el defineix l'administració">{rol}</span>
+            <span className="rolpill" title={veuTot ? "Pots consultar totes les reserves, però no modificar-les" : "El teu rol el defineix l'administració"}>{rol}{veuTot ? " · consulta" : ""}</span>
           )}
           {DEMO && <span className="pill demo">Mode demo</span>}
           {carregant && <span className="pill">Carregant…</span>}
@@ -1325,7 +1340,7 @@ export default function App() {
         {vista === "admin" && gestor && <Admin {...{ material, setMaterial, notifica }} />}
         {vista === "persones" && gestor && <Persones {...{ profes, setProfes, alumnes, setAlumnes, assignatures, setAssignatures, espais, setEspais, notifica, rol }} />}
       </main>
-      {editRes && <EditReserva r={editRes} espais={espais.filter((e) => e.reservable !== false)} onClose={() => setEditRes(null)} onSave={async (patch) => { if (await updateReserva(editRes.id, patch)) setEditRes(null); }} onAnular={() => anularReserva(editRes.id)} />}
+      {editRes && <EditReserva r={editRes} espais={espais.filter((e) => e.reservable !== false)} nomesLectura={!potEditarReserva(editRes)} onClose={() => setEditRes(null)} onSave={async (patch) => { if (await updateReserva(editRes.id, patch)) setEditRes(null); }} onAnular={() => anularReserva(editRes.id)} />}
       {toast && <div className="toast">{toast}</div>}
     </div>
   );
@@ -2220,7 +2235,7 @@ function Historial({ reserves, onEdit }) {
   return (
     <div>
       <h2 className="h2">Historial i traçabilitat</h2>
-      <p className="nota">Clica una reserva per editar-la o anul·lar-la. {reserves.length} registres.</p>
+      <p className="nota">Clica una reserva per veure'n el detall; si la gestiones tu, també la pots editar o anul·lar. {reserves.length} registres.</p>
       <table className="tbl"><thead><tr><th>Tipus</th><th>Referència</th><th>Assignatura</th><th>Sol·licitant</th><th>Data</th><th>Franja</th><th>Estat</th></tr></thead>
         <tbody>{mostra.map((r) => (
           <tr key={r.id} className="trclic" onClick={() => onEdit && onEdit(r)}><td>{r.tipus === "material" ? "Material" : "Espai"}{r.foraHorari ? " · fora" : ""}</td><td>{r.refNom}{r.quantitat ? ` ×${r.quantitat}` : ""}</td><td>{r.assignatura || "—"}</td><td>{r.sol}</td><td>{r.data}{(r.dataFi && r.dataFi !== r.data) ? ` → ${r.dataFi}` : ""}</td><td>{r.ini}–{r.fi}</td><td><Estat estat={estatVis(r.estat)} label={r.estat} /></td></tr>
@@ -2230,7 +2245,7 @@ function Historial({ reserves, onEdit }) {
   );
 }
 
-function EditReserva({ r, onClose, onSave, onAnular, espais = [] }) {
+function EditReserva({ r, onClose, onSave, onAnular, espais = [], nomesLectura = false }) {
   const [ref, setRef] = useState(r.ref);
   const [quant, setQuant] = useState(r.quantitat || 1);
   const [data, setData] = useState(r.data);
@@ -2239,9 +2254,9 @@ function EditReserva({ r, onClose, onSave, onAnular, espais = [] }) {
   const [fi, setFi] = useState(r.fi);
   const [motiu, setMotiu] = useState(r.motiu || "");
   const [confirma, setConfirma] = useState(false);
-  const anul = r.estat === "anul·lada";
+  const anul = r.estat === "anul·lada" || nomesLectura;
   return (
-    <Modal onClose={onClose} titol={`Editar reserva · ${r.refNom}`}>
+    <Modal onClose={onClose} titol={`${nomesLectura ? "Detall de la reserva" : "Editar reserva"} · ${r.refNom}`}>
       <p className="modal-sub">{r.tipus === "material" ? "Material" : "Espai"}{r.quantitat ? ` ×${r.quantitat}` : ""} · {r.sol} · <Estat estat={estatVis(r.estat)} label={r.estat} /></p>
       {r.tipus === "espai" && espais.length > 0 && (
         <Camp l="Espai"><select value={ref} disabled={anul} onChange={(e) => setRef(e.target.value)}>
@@ -2255,12 +2270,15 @@ function EditReserva({ r, onClose, onSave, onAnular, espais = [] }) {
       <div className="camp2"><Camp l={dataFi > data ? "Hora de recollida" : "Inici"}><input type="time" value={ini} disabled={anul} onChange={(e) => setIni(e.target.value)} /></Camp><Camp l={dataFi > data ? "Hora de retorn" : "Fi"}><input type="time" value={fi} disabled={anul} onChange={(e) => setFi(e.target.value)} /></Camp></div>
       <Camp l="Motiu"><textarea rows="2" value={motiu} disabled={anul} onChange={(e) => setMotiu(e.target.value)} /></Camp>
       {confirma && <p className="modal-note" style={{ background: "#fdecec" }}>Segur que vols anul·lar aquesta reserva? Alliberarà el recurs i es notificarà el sol·licitant.</p>}
+      {nomesLectura && <p className="modal-note">Aquesta reserva és d'una altra persona: la pots consultar, però no modificar.</p>}
       <div className="modal-act" style={{ justifyContent: "space-between" }}>
-        {!anul
-          ? (confirma
-            ? <button className="btn danger" onClick={onAnular}>Sí, anul·la</button>
-            : <button className="btn danger-ghost" onClick={() => setConfirma(true)}>Anul·lar reserva</button>)
-          : <span className="nota" style={{ margin: 0 }}>Aquesta reserva està anul·lada.</span>}
+        {nomesLectura
+          ? <span />
+          : !anul
+            ? (confirma
+              ? <button className="btn danger" onClick={onAnular}>Sí, anul·la</button>
+              : <button className="btn danger-ghost" onClick={() => setConfirma(true)}>Anul·lar reserva</button>)
+            : <span className="nota" style={{ margin: 0 }}>Aquesta reserva està anul·lada.</span>}
         <div style={{ display: "flex", gap: 10 }}>
           <button className="btn ghost" onClick={onClose}>Tanca</button>
           {!anul && <button className="btn prim" onClick={() => onSave({ data, dataFi, ini, fi, motiu, ...(r.tipus === "espai" ? { ref, refNom: ref } : { quantitat: quant }) })}>Desa canvis</button>}
