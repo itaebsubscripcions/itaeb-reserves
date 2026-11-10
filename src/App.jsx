@@ -961,6 +961,9 @@ const HORARI_LECTIU = [
 ];
 
 const PROFES_NOMS = ["Klaudia Álvarez", "Albert Anglada", "David Anguera", "David Arnaiz", "Paloma Bañuls", "Joana Castellano", "Mireia Cequiel", "Mercedes Collado", "Toni Contreras", "Eva Cruces", "Mireia Devesa", "Òscar Fernández", "Laura Fité", "Miguel Giménez", "Ada González", "Roger Granel", "Mònica Hernández", "Carmen Jiménez", "David Llamas", "Roberto López", "Meritxell Manyoses", "Albert Martí", "Anna Maria Martínez", "Álex Moreno", "Mònica Moreno", "Mariona Naudín", "David Pagès", "Joan Pedroche", "Tanit Plana", "Míriam Prieto", "Baldesca Punter", "Inma Redón", "Jaume Ricart", "Francesco Sinopoli", "Núria Solé", "Natalia Uviña", "Rubén Ventura", "Albert Villalbí", "Isabel Yuste"];
+// Opció fixa per als préstecs que no són de cap assignatura (projectes personals).
+// No es desa a la taula d'assignatures: sempre hi és i no es pot esborrar sense voler.
+const TREBALL_PERSONAL = "Treball personal";
 const PROFES = PROFES_NOMS.map((n) => ({ nom: n, email: correuDe(n) }));
 // Només per al MODE DEMO: permet provar l'aplicació des de diferents persones,
 // inclòs el professorat responsable dels espais fora d'horari.
@@ -1721,7 +1724,13 @@ function FormMaterial({ m, rol, usuari, onClose, onSubmit, profes = PROFES, assi
     <Modal onClose={onClose} titol={`Reservar · ${m.nom}`}>
       <p className="modal-sub">{m.codi} · {m.marca} · {m.ubic}</p>
       <Camp l="Unitats"><input type="number" min="1" max={m.unitats} value={q} onChange={(e) => setQ(+e.target.value)} /></Camp>
-      <Camp l="Assignatura"><AssigSelect assignatures={assignatures} value={assig} onChange={(v) => { setAssig(v); const p = (assigProfs[v] || []).slice(0, 3); setProfs(p); setProfsRec(p); }} /></Camp>
+      <Camp l={m.maleta ? "Assignatura o treball personal" : "Assignatura"}><AssigSelect assignatures={assignatures} value={assig} onChange={(v) => { setAssig(v); const p = (assigProfs[v] || []).slice(0, 3); setProfs(p); setProfsRec(p); }} /></Camp>
+      {m.maleta && assig !== TREBALL_PERSONAL && (
+        <p className="nota" style={{ margin: "-6px 0 12px" }}>
+          Si no és per a cap assignatura, tria{" "}
+          <button type="button" className="enllac" onClick={() => { setAssig(TREBALL_PERSONAL); setProfs([]); setProfsRec([]); }}>{TREBALL_PERSONAL}</button>.
+        </p>
+      )}
       <ProfPicker profes={profes} sel={profs} setSel={setProfs} label="Professor/a Entrega" />
       <ProfPicker profes={profes} sel={profsRec} setSel={setProfsRec} label="Professor/a Recollida" />
       <div className="camp2"><Camp l="Del dia"><input type="date" value={data} onChange={(e) => { const v = e.target.value; setData(v); if (v > dataFi) setDataFi(v); }} /></Camp><Camp l="Fins al dia"><input type="date" value={dataFi} min={data} onChange={(e) => setDataFi(e.target.value)} /></Camp></div>
@@ -2674,11 +2683,14 @@ function AssigSelect({ assignatures, value, onChange }) {
     const t = senseAccents(q.trim().toLowerCase());
     const base = t ? assignatures.filter((a) => senseAccents(a.toLowerCase()).includes(t)) : assignatures;
     // primer les que comencen pel que s'escriu
-    return base.slice().sort((a, b) => {
+    const llista = base.slice().sort((a, b) => {
       const A = senseAccents(parts(a)[0].toLowerCase()).startsWith(t) ? 0 : 1;
       const B = senseAccents(parts(b)[0].toLowerCase()).startsWith(t) ? 0 : 1;
       return A - B;
     }).slice(0, 12);
+    // "Treball personal" sempre a dalt: és l'opció per als projectes que no són de cap assignatura
+    const encaixa = !t || senseAccents(TREBALL_PERSONAL.toLowerCase()).includes(t) || "projecte personal".includes(t);
+    return encaixa ? [TREBALL_PERSONAL, ...llista.filter((a) => a !== TREBALL_PERSONAL)] : llista;
   }, [assignatures, q]);
   useEffect(() => { setMarcat(0); }, [q]);
 
@@ -2686,7 +2698,7 @@ function AssigSelect({ assignatures, value, onChange }) {
     const [nom, gr] = parts(value);
     return (
       <div className="chips" style={{ marginBottom: 0 }}>
-        <span className="pchip alum">{nom}{gr ? <em>{gr}</em> : null}<button onClick={() => { onChange(""); setQ(""); }} aria-label="Canvia d'assignatura">✕</button></span>
+        <span className={"pchip " + (value === TREBALL_PERSONAL ? "personal" : "alum")}>{nom}{gr ? <em>{gr}</em> : null}<button onClick={() => { onChange(""); setQ(""); }} aria-label="Canvia d'assignatura">✕</button></span>
       </div>
     );
   }
@@ -2704,14 +2716,14 @@ function AssigSelect({ assignatures, value, onChange }) {
       {obert && sug.length > 0 && (
         <div className="psugg">
           {sug.map((a, k) => { const [nom, gr] = parts(a); return (
-            <button key={a} className={k === marcat ? "on" : ""} onMouseEnter={() => setMarcat(k)}
+            <button key={a} className={(k === marcat ? "on" : "") + (a === TREBALL_PERSONAL ? " opcio-personal" : "")} onMouseEnter={() => setMarcat(k)}
               onMouseDown={(e) => e.preventDefault()} onClick={() => tria(a)}>
-              {nom} <em className="sugmail">{gr}</em>
+              {nom} <em className="sugmail">{a === TREBALL_PERSONAL ? "projecte fora d'assignatura" : gr}</em>
             </button>
           ); })}
         </div>
       )}
-      {obert && q.trim() && sug.length === 0 && <div className="psugg"><button disabled>Cap assignatura coincideix</button></div>}
+      {obert && q.trim() && sug.length === 0 && <div className="psugg"><button disabled>Cap assignatura coincideix. Esborra el text per triar «{TREBALL_PERSONAL}».</button></div>}
     </div>
   );
 }
@@ -2885,6 +2897,9 @@ const css = `
 .avis-pendents > span:nth-child(2) { flex:1; display:flex; flex-direction:column; gap:2px; }
 .avis-det { font-size:12px; color:#8a7a4a; }
 .avis-anar { flex:none; font-size:12.5px; font-weight:700; color:${BRAND.blau}; }
+.pchip.personal { background:#eef6ff; border-color:${BRAND.blau}; color:#0b4f7a; }
+.psugg button.opcio-personal { background:#f4faff; font-weight:600; }
+.enllac { border:none; background:none; padding:0; font:inherit; color:${BRAND.blau}; font-weight:700; text-decoration:underline; cursor:pointer; }
 .card-off { cursor:default; background:#fbfbfb; border-style:dashed; opacity:.7; }
 .card-off:hover { border-color:#e8e8e8; box-shadow:none; }
 .card-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:7px; }
