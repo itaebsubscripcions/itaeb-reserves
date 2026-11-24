@@ -2707,7 +2707,7 @@ function AssigSelect({ assignatures, value, onChange }) {
     <div className="pwrap">
       <input value={q} placeholder="Escriu l'assignatura o el grup…"
         onChange={(e) => { setQ(e.target.value); setObert(true); }}
-        onFocus={() => setObert(true)} onBlur={() => setTimeout(() => setObert(false), 150)}
+        onFocus={() => setObert(true)} onBlur={() => setTimeout(() => setObert(false), 350)}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown") { e.preventDefault(); setMarcat((m) => Math.min(m + 1, sug.length - 1)); }
           else if (e.key === "ArrowUp") { e.preventDefault(); setMarcat((m) => Math.max(m - 1, 0)); }
@@ -2717,7 +2717,7 @@ function AssigSelect({ assignatures, value, onChange }) {
         <div className="psugg">
           {sug.map((a, k) => { const [nom, gr] = parts(a); return (
             <button key={a} className={(k === marcat ? "on" : "") + (a === TREBALL_PERSONAL ? " opcio-personal" : "")} onMouseEnter={() => setMarcat(k)}
-              onMouseDown={(e) => e.preventDefault()} onClick={() => tria(a)}>
+              onPointerDown={(e) => e.preventDefault()} onClick={() => tria(a)}>
               {nom} <em className="sugmail">{a === TREBALL_PERSONAL ? "projecte fora d'assignatura" : gr}</em>
             </button>
           ); })}
@@ -2746,11 +2746,11 @@ function AlumnePicker({ alumnes, sel, setSel, label }) {
       <span>{label}</span>
       <div className="pwrap">
         <input value={q} placeholder="Cerca per nom o correu…" onChange={(e) => { setQ(e.target.value); setObert(true); }}
-          onFocus={() => setObert(true)} onBlur={() => setTimeout(() => setObert(false), 150)}
+          onFocus={() => setObert(true)} onBlur={() => setTimeout(() => setObert(false), 350)}
           onKeyDown={(e) => { if (e.key === "Enter" && sugg.length) { e.preventDefault(); setSel(sugg[0]); setQ(""); setObert(false); } }} />
         {obert && sugg.length > 0 && (
           <div className="psugg">
-            {sugg.map((a) => <button key={a.email} onMouseDown={(e) => e.preventDefault()} onClick={() => { setSel(a); setQ(""); setObert(false); }}>{a.nom} <em className="sugmail">{a.email}{a.grup ? ` · ${a.grup}` : ""}</em></button>)}
+            {sugg.map((a) => <button key={a.email} onPointerDown={(e) => e.preventDefault()} onClick={() => { setSel(a); setQ(""); setObert(false); }}>{a.nom} <em className="sugmail">{a.email}{a.grup ? ` · ${a.grup}` : ""}</em></button>)}
           </div>
         )}
       </div>
@@ -2779,11 +2779,11 @@ function ProfPicker({ profes, sel, setSel, max = 3, label }) {
       {!ple && (
         <div className="pwrap">
           <input value={q} placeholder="Escriu per cercar professorat…" onChange={(e) => { setQ(e.target.value); setObert(true); }}
-            onFocus={() => setObert(true)} onBlur={() => setTimeout(() => setObert(false), 150)}
+            onFocus={() => setObert(true)} onBlur={() => setTimeout(() => setObert(false), 350)}
             onKeyDown={(e) => { if (e.key === "Enter" && sugg.length) { e.preventDefault(); afegeix(sugg[0]); } }} />
           {obert && sugg.length > 0 && (
             <div className="psugg">
-              {sugg.map((n) => <button key={n} onMouseDown={(e) => e.preventDefault()} onClick={() => afegeix(n)}>{n}</button>)}
+              {sugg.map((n) => <button key={n} onPointerDown={(e) => e.preventDefault()} onClick={() => afegeix(n)}>{n}</button>)}
             </div>
           )}
         </div>
