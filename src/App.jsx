@@ -1742,7 +1742,11 @@ function FormMaterial({ m, rol, usuari, onClose, onSubmit, profes = PROFES, assi
         ? <p className="nota" style={{ margin: "0 0 10px" }}>Per a un préstec de cap de setmana, posa «Fins al dia» al dia del retorn: així pots recollir-la divendres a la tarda i tornar-la dilluns al matí.</p>
         : null}
       <Camp l="Motiu"><textarea rows="2" value={motiu} placeholder={m.maleta ? "Projecte personal o lectiu…" : "Ús a l'aula…"} onChange={(e) => setMotiu(e.target.value)} /></Camp>
-      {esAlumne ? <p className="modal-note">La petició quedarà <b>pendent</b> d'aprovació de {profs.length ? profs.join(", ") : "el professorat indicat"}.</p> : <p className="modal-note">Com a {rol.toLowerCase()}, la reserva es <b>confirma automàticament</b>.</p>}
+      {esAlumne
+        ? <p className="modal-note">La petició quedarà <b>pendent</b> de validació. {assig === TREBALL_PERSONAL
+            ? "Com que és un treball personal, n'avisem per correu el teu tutor o tutora."
+            : "N'avisem per correu el professorat de l'assignatura."}</p>
+        : <p className="modal-note">Com a {rol.toLowerCase()}, la reserva es <b>confirma automàticament</b>.</p>}
       <div className="modal-act"><button className="btn ghost" onClick={onClose}>Cancel·la</button>
         <button className="btn prim" onClick={() => onSubmit({ tipus: "material", ref: m.codi, refNom: m.nom, quantitat: q, data, dataFi, torn: ini < "15:00" ? "mati" : "tarda", ini, fi, motiu, assignatura: assig, professors: profs, professor: profs[0] || "", profsRecollida: profsRec, foraHorari: !!m.maleta })}>{esAlumne ? "Envia sol·licitud" : "Confirma reserva"}</button>
       </div>
@@ -1993,7 +1997,7 @@ function FormEspai({ e, rol, usuari, preset, onClose, onSubmit, profes = PROFES,
         </>
       )}
       <Camp l="Motiu"><textarea rows="2" value={motiu} onChange={(ev) => setMotiu(ev.target.value)} /></Camp>
-      {fora ? <p className="modal-note">Espai <b>fora d'horari</b>: la validarà {responsableNom ? <b>{responsableNom}</b> : "el professorat responsable de l'espai"}, responsable de l'espai. {proto.nota}</p>
+      {fora ? <p className="modal-note">Espai <b>fora d'horari</b>: la validarà {responsableNom ? <b>{responsableNom}</b> : "el professorat responsable de l'espai"}, responsable de l'espai, que en rebrà un avís per correu. {proto.nota}</p>
         : (esAlumne ? <p className="modal-note">Com a alumne no pots reservar espais dins d'horari lectiu. Contacta amb el professorat.</p> : <p className="modal-note">El professorat de l'assignatura confirma la reserva automàticament.</p>)}
       <div className="modal-act"><button className="btn ghost" onClick={onClose}>Cancel·la</button>
         <button className="btn prim" disabled={!fora && esAlumne} onClick={() => onSubmit({ tipus: "espai", ref: e.nom, refNom: e.nom, periodica, persones: fora ? persones : undefined, data, torn: ini < "15:00" ? "mati" : "tarda", ini, fi, motiu, assignatura: assig, professors: profs, professor: profs[0] || "", foraHorari: fora })}>{rol === "Professor" && !fora ? "Confirma reserva" : "Envia sol·licitud"}</button>
@@ -2523,7 +2527,12 @@ function GestioAlumnat({ alumnes, setAlumnes, notifica }) {
       const nets = rows.map((r) => ({ nom: (r.nom || r.Nom || "").trim(), email: (r.email || r.Email || r.correu || "").trim(), grup: (r.grup || r.Grup || "").trim() }))
         .filter((a) => a.nom && a.email);
       if (!nets.length) return notifica("No s'han trobat files amb columnes 'nom' i 'email'.");
-      setAlumnes(nets); notifica(`Alumnat importat: ${nets.length} registres.`);
+      setAlumnes(nets);
+      if (DEMO) return notifica(`Alumnat importat: ${nets.length} registres.`);
+      notifica(`Desant ${nets.length} registres…`);
+      db.desaUsuaris(nets, "alumne")
+        .then(() => notifica(`Alumnat desat: ${nets.length} registres.`))
+        .catch((e) => notifica("Error desant: " + e.message));
     };
     if (file.name.toLowerCase().endsWith(".csv")) Papa.parse(file, { header: true, skipEmptyLines: true, complete: (res) => fin(res.data) });
     else { const rd = new FileReader(); rd.onload = (ev) => { const wb = XLSX.read(ev.target.result, { type: "array" }); fin(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]])); }; rd.readAsArrayBuffer(file); }
@@ -2539,7 +2548,7 @@ function GestioAlumnat({ alumnes, setAlumnes, notifica }) {
           <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" style={{ display: "none" }} onChange={(e) => { if (e.target.files[0]) importa(e.target.files[0]); e.target.value = ""; }} />
         </div>
       </div>
-      <p className="nota">Només administració. La llista alimenta el camp "Alumne/a responsable" de les reserves. El fitxer ha de tenir les columnes <b>nom</b>, <b>email</b> i (opcional) <b>grup</b>. Importar substitueix la llista sencera.</p>
+      <p className="nota">Només administració. El fitxer ha de tenir les columnes <b>nom</b>, <b>email</b> i <b>grup</b>. Importar afegeix qui falti i actualitza el nom i el grup de qui ja hi consta: no esborra ningú. El grup és el que decideix a quina tutoria s'avisa dels treballs personals, i la llista alimenta el camp «Alumne/a responsable» de les reserves.</p>
       <div className="mlist" style={{ maxHeight: "40vh", overflow: "auto" }}>
         {alumnes.length === 0 && <div className="buit" style={{ border: 0 }}>Cap alumne carregat. Importa un CSV o Excel.</div>}
         {alumnes.map((a, i) => (
